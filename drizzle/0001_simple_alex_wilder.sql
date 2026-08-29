@@ -1,0 +1,1 @@
+ALTER TABLE `orders` ADD `tracking_code_hash` text DEFAULT '' NOT NULL;

@@ -1,0 +1,19 @@
+{
+  "folders": [
+    {
+      "name": "Bel's Kitchen Catering Service",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "editor.formatOnSave": true,
+    "files.exclude": {
+      "**/.next": true,
+      "**/.sites-runtime": true,
+      "**/.wrangler": true,
+      "**/dist": true,
+      "**/node_modules": true
+    },
+    "typescript.tsdk": "node_modules/typescript/lib"
+  }
+}
