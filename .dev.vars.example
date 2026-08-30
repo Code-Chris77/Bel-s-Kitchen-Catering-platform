@@ -1,5 +1,5 @@
-KITCHEN_PASSWORD=Ember-29686f05f9ab
-KITCHEN_SESSION_SECRET=5a3344255404c1e53fe2eacddce598b51fcbacb9f1810ef986668b891b15f82f
-ADMIN_EMAIL=admin@belskitchen.com
-ADMIN_PASSWORD=BelsAdmin-e0ee92d23911
-ADMIN_SESSION_SECRET=8d712d56a5ef4c9343511656dec964ee99f30bfb0f4f7f46991b968186f2747d
+KITCHEN_PASSWORD=replace-with-a-strong-kitchen-password
+KITCHEN_SESSION_SECRET=replace-with-a-long-random-kitchen-session-secret
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=replace-with-a-strong-admin-password
+ADMIN_SESSION_SECRET=replace-with-a-long-random-admin-session-secret

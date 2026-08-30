@@ -14,12 +14,9 @@ function adminEnvironment(): AdminEnvironment {
   const p = typeof process !== "undefined" ? (process.env as unknown as AdminEnvironment) : {};
 
   return {
-    ADMIN_EMAIL: e.ADMIN_EMAIL || p.ADMIN_EMAIL || "admin@belskitchen.com",
-    ADMIN_PASSWORD: e.ADMIN_PASSWORD || p.ADMIN_PASSWORD || "BelsAdmin-e0ee92d23911",
-    ADMIN_SESSION_SECRET:
-      e.ADMIN_SESSION_SECRET ||
-      p.ADMIN_SESSION_SECRET ||
-      "8d712d56a5ef4c9343511656dec964ee99f30bfb0f4f7f46991b968186f2747d",
+    ADMIN_EMAIL: e.ADMIN_EMAIL || p.ADMIN_EMAIL,
+    ADMIN_PASSWORD: e.ADMIN_PASSWORD || p.ADMIN_PASSWORD,
+    ADMIN_SESSION_SECRET: e.ADMIN_SESSION_SECRET || p.ADMIN_SESSION_SECRET,
   };
 }
 

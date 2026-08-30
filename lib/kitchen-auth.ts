@@ -21,11 +21,8 @@ function kitchenEnvironment(): KitchenEnvironment {
   const p = typeof process !== "undefined" ? (process.env as unknown as KitchenEnvironment) : {};
 
   return {
-    KITCHEN_PASSWORD: e.KITCHEN_PASSWORD || p.KITCHEN_PASSWORD || "Ember-29686f05f9ab",
-    KITCHEN_SESSION_SECRET:
-      e.KITCHEN_SESSION_SECRET ||
-      p.KITCHEN_SESSION_SECRET ||
-      "5a3344255404c1e53fe2eacddce598b51fcbacb9f1810ef986668b891b15f82f",
+    KITCHEN_PASSWORD: e.KITCHEN_PASSWORD || p.KITCHEN_PASSWORD,
+    KITCHEN_SESSION_SECRET: e.KITCHEN_SESSION_SECRET || p.KITCHEN_SESSION_SECRET,
   };
 }
 
