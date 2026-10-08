@@ -4,12 +4,15 @@ import {
   createKitchenSessionCookie,
   hasKitchenSession,
 } from "@/lib/kitchen-auth";
+import { LOGIN_LIMIT, allowRequest, tooManyRequests } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
   return Response.json({ authenticated: await hasKitchenSession(request) });
 }
 
 export async function POST(request: Request) {
+  if (!(await allowRequest(request, LOGIN_LIMIT))) return tooManyRequests(LOGIN_LIMIT);
+
   try {
     const payload = (await request.json()) as { password?: string };
     const password = typeof payload.password === "string" ? payload.password.slice(0, 160) : "";

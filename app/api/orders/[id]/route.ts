@@ -1,15 +1,6 @@
 import { getD1 } from "@/db";
+import { ORDER_STATUSES, nextStatus, type OrderType } from "@/lib/domain";
 import { hasKitchenSession, kitchenUnauthorizedResponse } from "@/lib/kitchen-auth";
-
-const STATUSES = new Set([
-  "received",
-  "preparing",
-  "ready",
-  "collected",
-  "out_for_delivery",
-  "delivered",
-  "cancelled",
-]);
 
 export async function PATCH(
   request: Request,
@@ -23,7 +14,11 @@ export async function PATCH(
     const payload = (await request.json()) as { status?: string };
     const status = typeof payload.status === "string" ? payload.status : "";
 
-    if (!Number.isInteger(orderId) || orderId < 1 || !STATUSES.has(status)) {
+    if (
+      !Number.isInteger(orderId) ||
+      orderId < 1 ||
+      !(ORDER_STATUSES as readonly string[]).includes(status)
+    ) {
       return Response.json({ error: "Invalid order update." }, { status: 400 });
     }
 
@@ -31,44 +26,36 @@ export async function PATCH(
     const current = await db
       .prepare("SELECT order_type, status FROM orders WHERE id = ? LIMIT 1")
       .bind(orderId)
-      .first<{ order_type: "delivery" | "dine_in"; status: string }>();
+      .first<{ order_type: OrderType; status: string }>();
 
     if (!current) {
       return Response.json({ error: "Order not found." }, { status: 404 });
     }
 
-    const allowedNextStatus =
-      current.status === "received"
-        ? "preparing"
-        : current.status === "preparing"
-          ? "ready"
-          : current.status === "ready" && current.order_type === "dine_in"
-            ? "collected"
-            : current.status === "ready"
-              ? "out_for_delivery"
-              : current.status === "out_for_delivery"
-                ? "delivered"
-                : null;
-
-    if (status !== allowedNextStatus) {
+    if (status !== nextStatus(current.status, current.order_type)) {
       return Response.json(
         { error: "This order cannot move to that stage." },
         { status: 409 },
       );
     }
 
+    // Compare-and-swap on the status we validated against, so two kitchen
+    // devices cannot both advance (or skip) the same order.
     const result = await db
       .prepare(
         `UPDATE orders
         SET status = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
+        WHERE id = ? AND status = ?
         RETURNING id, status, updated_at`,
       )
-      .bind(status, orderId)
+      .bind(status, orderId, current.status)
       .first<{ id: number; status: string; updated_at: string }>();
 
     if (!result) {
-      return Response.json({ error: "Order not found." }, { status: 404 });
+      return Response.json(
+        { error: "This order was just updated by someone else. Refresh the queue." },
+        { status: 409 },
+      );
     }
 
     return Response.json({

@@ -3,3 +3,5 @@ KITCHEN_SESSION_SECRET=replace-with-a-long-random-kitchen-session-secret
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=replace-with-a-strong-admin-password
 ADMIN_SESSION_SECRET=replace-with-a-long-random-admin-session-secret
+# Optional. Keys the order tracking-code hashes; defaults to KITCHEN_SESSION_SECRET.
+TRACKING_SECRET=replace-with-a-long-random-tracking-secret

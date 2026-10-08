@@ -22,20 +22,18 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { SiteBrand } from "@/components/site-brand";
-
-type OrderStatus =
-  | "received"
-  | "preparing"
-  | "ready"
-  | "collected"
-  | "out_for_delivery"
-  | "delivered"
-  | "cancelled";
+import {
+  ACTIVE_STATUSES,
+  DELIVERY_ZONES,
+  nextStatus,
+  type OrderStatus,
+  type OrderType,
+} from "@/lib/domain";
 
 type KitchenOrder = {
   id: number;
   orderNumber: number;
-  orderType: "delivery" | "dine_in";
+  orderType: OrderType;
   status: OrderStatus;
   customerName: string;
   customerPhone: string;
@@ -67,25 +65,17 @@ const columns: Array<{
   { status: "ready", title: "Ready", note: "Call the number" },
 ];
 
-const zoneLabels = {
-  accra: "Accra",
-  tema: "Tema",
-  outside: "Outside Accra",
+const actionLabels: Record<string, string> = {
+  preparing: "Start preparing",
+  ready: "Mark ready",
+  collected: "Collected",
+  out_for_delivery: "Send for delivery",
+  delivered: "Mark delivered",
 };
 
 function nextAction(order: KitchenOrder) {
-  if (order.status === "received") return { status: "preparing", label: "Start preparing" };
-  if (order.status === "preparing") return { status: "ready", label: "Mark ready" };
-  if (order.status === "ready" && order.orderType === "dine_in") {
-    return { status: "collected", label: "Collected" };
-  }
-  if (order.status === "ready") {
-    return { status: "out_for_delivery", label: "Send for delivery" };
-  }
-  if (order.status === "out_for_delivery") {
-    return { status: "delivered", label: "Mark delivered" };
-  }
-  return null;
+  const status = nextStatus(order.status, order.orderType);
+  return status ? { status, label: actionLabels[status] } : null;
 }
 
 function timeLabel(value: string) {
@@ -147,7 +137,7 @@ export default function KitchenPage() {
   const activeOrders = useMemo(
     () =>
       orders.filter((order) =>
-        ["received", "preparing", "ready", "out_for_delivery"].includes(order.status),
+        (ACTIVE_STATUSES as readonly string[]).includes(order.status),
       ),
     [orders],
   );
@@ -351,7 +341,7 @@ export default function KitchenPage() {
                         {order.orderType === "delivery" && (
                           <div className="ticket-location">
                             <MapPin />
-                            <span><strong>{order.deliveryZone ? zoneLabels[order.deliveryZone] : "Delivery"}</strong>{order.deliveryLocation}</span>
+                            <span><strong>{order.deliveryZone ? DELIVERY_ZONES[order.deliveryZone].label : "Delivery"}</strong>{order.deliveryLocation}</span>
                           </div>
                         )}
                         <div className="ticket-total"><span>{timeLabel(order.createdAt)}</span><strong>GH₵{order.total}</strong></div>

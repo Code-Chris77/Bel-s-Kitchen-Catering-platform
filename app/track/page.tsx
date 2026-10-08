@@ -21,19 +21,11 @@ import {
 } from "@/components/ui/input-otp";
 import { Progress } from "@/components/ui/progress";
 import { SiteBrand } from "@/components/site-brand";
-
-type OrderStatus =
-  | "received"
-  | "preparing"
-  | "ready"
-  | "collected"
-  | "out_for_delivery"
-  | "delivered"
-  | "cancelled";
+import type { OrderStatus, OrderType } from "@/lib/domain";
 
 type TrackedOrder = {
   orderNumber: number;
-  orderType: "delivery" | "dine_in";
+  orderType: OrderType;
   status: OrderStatus;
   paymentStatus: string;
   updatedAt: string;
@@ -109,19 +101,16 @@ export default function TrackOrderPage() {
     void loadProgress();
   };
 
+  const finished =
+    order?.status === "collected" || order?.status === "delivered" || order?.status === "cancelled";
+
   useEffect(() => {
-    if (!order) return;
+    if (!order || finished) return;
     const interval = window.setInterval(() => void loadProgress(true), 5000);
     return () => window.clearInterval(interval);
-  }, [loadProgress, order]);
+  }, [finished, loadProgress, order]);
 
   const terminal = order?.status === "collected" || order?.status === "delivered";
-
-  useEffect(() => {
-    if (!terminal) return;
-    const timer = window.setTimeout(() => window.location.assign("/"), 3500);
-    return () => window.clearTimeout(timer);
-  }, [terminal]);
 
   const stages = useMemo(
     () => (order?.orderType === "delivery" ? deliveryStages : dineInStages),
@@ -237,7 +226,7 @@ export default function TrackOrderPage() {
             </ol>
 
             {terminal ? (
-              <p className="tracking-redirect">Returning you to the main page…</p>
+              <Button asChild className="tracking-submit"><Link href="/">Return to main page</Link></Button>
             ) : (
               <p className="tracking-refresh"><Clock3 /> Progress updates automatically.</p>
             )}

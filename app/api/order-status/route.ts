@@ -1,4 +1,6 @@
 import { getD1 } from "@/db";
+import { TRACKING_LIMIT, allowRequest, tooManyRequests } from "@/lib/rate-limit";
+import { hashTrackingCode, legacyHashTrackingCode } from "@/lib/tracking";
 
 type TrackingRow = {
   id: number;
@@ -8,15 +10,9 @@ type TrackingRow = {
   updated_at: string;
 };
 
-async function hashTrackingCode(code: string) {
-  const bytes = new TextEncoder().encode(code);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
-
 export async function POST(request: Request) {
+  if (!(await allowRequest(request, TRACKING_LIMIT))) return tooManyRequests(TRACKING_LIMIT);
+
   try {
     const payload = (await request.json()) as {
       orderNumber?: number | string;
@@ -35,17 +31,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const trackingCodeHash = await hashTrackingCode(trackingCode);
+    const [keyedHash, legacyHash] = await Promise.all([
+      hashTrackingCode(trackingCode),
+      legacyHashTrackingCode(trackingCode),
+    ]);
     const order = await getD1()
       .prepare(
         `SELECT id, order_type, status, payment_status, updated_at
         FROM orders
         WHERE id = ?
-          AND tracking_code_hash = ?
+          AND tracking_code_hash IN (?, ?)
           AND payment_status IN ('paid', 'demo_paid')
         LIMIT 1`,
       )
-      .bind(orderNumber, trackingCodeHash)
+      .bind(orderNumber, keyedHash, legacyHash)
       .first<TrackingRow>();
 
     if (!order) {
