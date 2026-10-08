@@ -1,4 +1,5 @@
 import { getD1 } from "@/db";
+import { logError } from "@/lib/log";
 import { TRACKING_LIMIT, allowRequest, tooManyRequests } from "@/lib/rate-limit";
 import { hashTrackingCode, legacyHashTrackingCode } from "@/lib/tracking";
 
@@ -63,7 +64,8 @@ export async function POST(request: Request) {
         updatedAt: order.updated_at,
       },
     });
-  } catch {
+  } catch (error) {
+    logError("order_status_failed", error);
     return Response.json(
       { error: "Your order progress could not be loaded. Please try again." },
       { status: 500 },

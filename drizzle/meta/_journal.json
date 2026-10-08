@@ -29,6 +29,13 @@
       "when": 1791498904987,
       "tag": "0003_rate_limits_and_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791502818780,
+      "tag": "0004_order_events",
+      "breakpoints": true
     }
   ]
 }

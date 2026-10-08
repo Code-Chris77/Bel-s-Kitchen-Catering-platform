@@ -14,6 +14,8 @@ import {
   type OrderType,
 } from "@/lib/domain";
 import { hasKitchenSession, kitchenUnauthorizedResponse } from "@/lib/kitchen-auth";
+import { logError } from "@/lib/log";
+import { normalizeGhanaPhone } from "@/lib/format";
 import { ORDER_LIMIT, allowRequest, tooManyRequests } from "@/lib/rate-limit";
 import { createTrackingCode, hashTrackingCode } from "@/lib/tracking";
 
@@ -160,15 +162,14 @@ export async function POST(request: Request) {
       ? (payload.orderType as OrderType)
       : null;
     const customerName = cleanText(payload.customerName, 80);
-    const customerPhone = cleanText(payload.customerPhone, 30);
-    const phoneDigits = customerPhone.replace(/\D/g, "");
+    const customerPhone = normalizeGhanaPhone(cleanText(payload.customerPhone, 30));
     const paymentMethod = cleanText(payload.paymentMethod, 20);
 
     if (!orderType) {
       return Response.json({ error: "Choose delivery or order at restaurant." }, { status: 400 });
     }
-    if (!customerName || phoneDigits.length < 9) {
-      return Response.json({ error: "Add your name and a valid phone number." }, { status: 400 });
+    if (!customerName || !customerPhone) {
+      return Response.json({ error: "Add your name and a valid Ghana phone number." }, { status: 400 });
     }
     if (!isPaymentMethod(paymentMethod)) {
       return Response.json({ error: "Choose a valid payment method." }, { status: 400 });
@@ -270,6 +271,10 @@ export async function POST(request: Request) {
         WHERE order_id = ${newOrderId}
         ORDER BY id ASC`,
       ),
+      db.prepare(
+        `INSERT INTO order_events (order_id, from_status, to_status, actor)
+        VALUES (${newOrderId}, NULL, 'received', 'customer')`,
+      ),
     ]);
 
     const order = orderResult.results?.[0] as OrderRow | undefined;
@@ -291,7 +296,7 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
-    console.error("Order could not be saved", error instanceof Error ? error.message : error);
+    logError("order_create_failed", error);
     return Response.json({ error: errorMessage(error) }, { status: 500 });
   }
 }

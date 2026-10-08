@@ -1,10 +1,11 @@
 import { sql } from "drizzle-orm";
+import { ORDER_STATUSES, ORDER_TYPES, PAYMENT_METHODS } from "../lib/domain";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const orders = sqliteTable("orders", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  orderType: text("order_type").notNull(),
-  status: text("status").notNull().default("received"),
+  orderType: text("order_type", { enum: ORDER_TYPES }).notNull(),
+  status: text("status", { enum: ORDER_STATUSES }).notNull().default("received"),
   customerName: text("customer_name").notNull(),
   customerPhone: text("customer_phone").notNull(),
   deliveryZone: text("delivery_zone"),
@@ -12,7 +13,7 @@ export const orders = sqliteTable("orders", {
   deliveryFee: integer("delivery_fee").notNull().default(0),
   subtotal: integer("subtotal").notNull(),
   total: integer("total").notNull(),
-  paymentMethod: text("payment_method").notNull(),
+  paymentMethod: text("payment_method", { enum: PAYMENT_METHODS }).notNull(),
   paymentStatus: text("payment_status").notNull().default("demo_paid"),
   trackingCodeHash: text("tracking_code_hash").notNull().default(""),
   customerSmsStatus: text("customer_sms_status").notNull().default("demo"),
@@ -48,3 +49,15 @@ export const rateLimits = sqliteTable("rate_limits", {
   windowStart: integer("window_start").notNull(),
   count: integer("count").notNull().default(0),
 }, (table) => [index("rate_limits_window_start_idx").on(table.windowStart)]);
+
+/** Audit trail of every status change (who moved which order, and when). */
+export const orderEvents = sqliteTable("order_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  orderId: integer("order_id")
+    .notNull()
+    .references(() => orders.id, { onDelete: "cascade" }),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status", { enum: ORDER_STATUSES }).notNull(),
+  actor: text("actor").notNull().default("kitchen"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("order_events_order_id_idx").on(table.orderId)]);

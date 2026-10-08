@@ -11,7 +11,8 @@ React 19, Tailwind CSS 4, shadcn/ui, and Cloudflare Workers + D1 with Drizzle OR
 | `/` | Customer menu, cart and checkout (delivery or restaurant pickup) |
 | `/track` | Order progress, opened with the order number and 6-digit tracking password |
 | `/kitchen` | Password-protected kitchen queue for chefs |
-| `/admin` | Admin login, revenue dashboard and kitchen-password management |
+| `/admin` | Admin login, revenue dashboard, CSV export and kitchen-password management |
+| `/privacy` | What customer data is kept and for how long |
 
 ## Requirements
 
@@ -65,14 +66,19 @@ Use long random values for every secret.
 3. Add each secret above with `npx wrangler secret put`.
 4. `npm run deploy`
 
-CI (`.github/workflows/ci.yml`) runs typecheck, lint and tests on every push and pull request.
+CI (`.github/workflows/ci.yml`) runs typecheck, lint and tests on every push and pull request; CodeQL and Dependabot are enabled.
+`.github/workflows/deploy.yml` can deploy manually once `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets exist.
+
+A daily Cron Trigger (`wrangler.jsonc`) anonymises customer names, phone numbers and delivery locations on orders older than 90 days (`lib/retention.ts`).
 
 ## Project layout
 
 | Folder | Contents |
 | --- | --- |
 | `app/` | Pages and API routes |
-| `components/` | Brand component and shadcn/ui primitives |
+| `components/` | Brand component and the shadcn/ui primitives in use |
+| `hooks/` | Shared React hooks (visibility-aware polling) |
+| `branding/` | Full-resolution original logo (the site serves a resized copy from `public/`) |
 | `db/` | D1 access and Drizzle schema |
 | `drizzle/` | SQL migrations |
 | `lib/` | Menu/status rules (`domain.ts`), auth, tracking codes, rate limiting, crypto helpers |
@@ -86,6 +92,7 @@ defined once in `lib/domain.ts`.
 
 - Sessions are signed, `HttpOnly; Secure; SameSite=Strict` cookies.
 - Login, order creation and order tracking are rate limited per IP (D1-backed, `lib/rate-limit.ts`).
+- Kitchen staff can cancel an order until it leaves the kitchen; every status change is recorded in `order_events`.
 - Tracking codes are stored as keyed HMACs; kitchen passwords as salted PBKDF2.
 - The worker sets CSP, HSTS and related headers, marks `/admin`, `/kitchen` and `/track` as `noindex`,
   and rejects cross-origin writes to `/api/*`.

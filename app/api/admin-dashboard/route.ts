@@ -34,14 +34,15 @@ export async function GET(request: Request) {
     const [summaryResult, dailyResult, recentResult] = await db.batch([
       db.prepare(
         `SELECT
-          COALESCE(SUM(CASE WHEN date(created_at) = date('now') THEN total ELSE 0 END), 0) AS today_revenue,
-          COALESCE(SUM(CASE WHEN strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') THEN total ELSE 0 END), 0) AS month_revenue,
-          COALESCE(SUM(CASE WHEN strftime('%Y', created_at) = strftime('%Y', 'now') THEN total ELSE 0 END), 0) AS year_revenue,
-          COALESCE(SUM(CASE WHEN date(created_at) = date('now') THEN 1 ELSE 0 END), 0) AS today_orders,
-          COALESCE(SUM(CASE WHEN strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') THEN 1 ELSE 0 END), 0) AS month_orders,
-          COALESCE(SUM(CASE WHEN strftime('%Y', created_at) = strftime('%Y', 'now') THEN 1 ELSE 0 END), 0) AS year_orders
+          COALESCE(SUM(CASE WHEN created_at >= date('now') THEN total ELSE 0 END), 0) AS today_revenue,
+          COALESCE(SUM(CASE WHEN created_at >= date('now', 'start of month') THEN total ELSE 0 END), 0) AS month_revenue,
+          COALESCE(SUM(total), 0) AS year_revenue,
+          COALESCE(SUM(CASE WHEN created_at >= date('now') THEN 1 ELSE 0 END), 0) AS today_orders,
+          COALESCE(SUM(CASE WHEN created_at >= date('now', 'start of month') THEN 1 ELSE 0 END), 0) AS month_orders,
+          COALESCE(COUNT(*), 0) AS year_orders
         FROM orders
-        WHERE payment_status IN ('paid', 'demo_paid')
+        WHERE created_at >= date('now', 'start of year')
+          AND payment_status IN ('paid', 'demo_paid')
           AND status != 'cancelled'`,
       ),
       db.prepare(

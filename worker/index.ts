@@ -1,6 +1,7 @@
 /** Cloudflare Worker entry point. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { purgeExpiredData } from "../lib/retention";
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -72,6 +73,15 @@ const worker = {
     }
 
     return withSecurityHeaders(request, url, await handler.fetch(request, env, ctx));
+  },
+
+  /** Daily cron (see wrangler.jsonc): anonymise old customer details, clear stale rate-limit rows. */
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(
+      purgeExpiredData(env.DB).then((result) =>
+        console.log(JSON.stringify({ event: "retention_purge", ...result })),
+      ),
+    );
   },
 };
 

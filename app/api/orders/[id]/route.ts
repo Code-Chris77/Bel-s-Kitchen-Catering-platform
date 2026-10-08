@@ -1,6 +1,7 @@
 import { getD1 } from "@/db";
-import { ORDER_STATUSES, nextStatus, type OrderType } from "@/lib/domain";
+import { ORDER_STATUSES, canCancel, nextStatus, type OrderType } from "@/lib/domain";
 import { hasKitchenSession, kitchenUnauthorizedResponse } from "@/lib/kitchen-auth";
+import { logError } from "@/lib/log";
 
 export async function PATCH(
   request: Request,
@@ -32,7 +33,11 @@ export async function PATCH(
       return Response.json({ error: "Order not found." }, { status: 404 });
     }
 
-    if (status !== nextStatus(current.status, current.order_type)) {
+    const allowed =
+      status === "cancelled"
+        ? canCancel(current.status)
+        : status === nextStatus(current.status, current.order_type);
+    if (!allowed) {
       return Response.json(
         { error: "This order cannot move to that stage." },
         { status: 409 },
@@ -41,15 +46,26 @@ export async function PATCH(
 
     // Compare-and-swap on the status we validated against, so two kitchen
     // devices cannot both advance (or skip) the same order.
-    const result = await db
-      .prepare(
-        `UPDATE orders
-        SET status = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND status = ?
-        RETURNING id, status, updated_at`,
-      )
-      .bind(status, orderId, current.status)
-      .first<{ id: number; status: string; updated_at: string }>();
+    const [updated] = await db.batch([
+      db
+        .prepare(
+          `UPDATE orders
+          SET status = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND status = ?
+          RETURNING id, status, updated_at`,
+        )
+        .bind(status, orderId, current.status),
+      // Only logged when the update above actually changed a row.
+      db
+        .prepare(
+          `INSERT INTO order_events (order_id, from_status, to_status, actor)
+          SELECT ?, ?, ?, 'kitchen' WHERE changes() > 0`,
+        )
+        .bind(orderId, current.status, status),
+    ]);
+    const result = updated.results?.[0] as
+      | { id: number; status: string; updated_at: string }
+      | undefined;
 
     if (!result) {
       return Response.json(
@@ -66,7 +82,8 @@ export async function PATCH(
         updatedAt: result.updated_at,
       },
     });
-  } catch {
+  } catch (error) {
+    logError("order_update_failed", error);
     return Response.json({ error: "The order could not be updated." }, { status: 500 });
   }
 }

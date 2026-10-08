@@ -30,8 +30,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Toaster } from "@/components/ui/sonner";
 import { SiteBrand } from "@/components/site-brand";
+import { formatCedis } from "@/lib/format";
 
 type Summary = {
   todayRevenue: number;
@@ -95,9 +95,7 @@ const statusLabels: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-function money(value: number) {
-  return `GH₵${Math.round(value).toLocaleString("en-GH")}`;
-}
+const money = formatCedis;
 
 function dateTimeLabel(value: string) {
   const date = new Date(value.endsWith("Z") ? value : `${value}Z`);
@@ -299,7 +297,6 @@ export default function AdminPage() {
 
   return (
     <main className="admin-page">
-      <Toaster position="top-center" richColors />
       <nav className="admin-nav">
         <SiteBrand admin />
         <div className="admin-nav-actions">
@@ -344,6 +341,11 @@ export default function AdminPage() {
 
       <section className="admin-workspace">
         <div className="admin-records-card">
+          <form className="admin-export" method="get" action="/api/admin-export">
+            <label>From <input type="date" name="from" /></label>
+            <label>To <input type="date" name="to" /></label>
+            <Button type="submit" variant="outline">Download CSV</Button>
+          </form>
           <Tabs defaultValue="daily">
             <div className="admin-card-heading">
               <div><p className="eyebrow">TRANSACTION RECORDS</p><h2>Money and orders.</h2></div>

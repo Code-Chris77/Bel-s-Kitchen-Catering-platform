@@ -4,6 +4,7 @@ import {
   createKitchenSessionCookie,
   hasKitchenSession,
 } from "@/lib/kitchen-auth";
+import { logError } from "@/lib/log";
 import { LOGIN_LIMIT, allowRequest, tooManyRequests } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
@@ -27,7 +28,8 @@ export async function POST(request: Request) {
         "Set-Cookie": await createKitchenSessionCookie(),
       },
     });
-  } catch {
+  } catch (error) {
+    logError("kitchen_login_failed", error);
     return Response.json(
       { error: "Kitchen access is not available. Please try again." },
       { status: 500 },

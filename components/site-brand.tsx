@@ -18,8 +18,8 @@ export function SiteBrand({ href = "/", admin = false, className = "" }: SiteBra
         className="brand-logo-image"
         src="/bels-kitchen-logo.png"
         alt="Bel's Kitchen Catering Service logo"
-        width={1039}
-        height={1029}
+        width={256}
+        height={225}
         sizes="56px"
         unoptimized
       />

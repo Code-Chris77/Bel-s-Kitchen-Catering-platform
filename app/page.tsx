@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   Bike,
   Check,
@@ -10,6 +11,8 @@ import {
   Clock3,
   MapPin,
   Minus,
+  Pause,
+  Play,
   Plus,
   QrCode,
   ShoppingBag,
@@ -37,8 +40,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Toaster } from "@/components/ui/sonner";
 import { SiteBrand } from "@/components/site-brand";
+import { normalizeGhanaPhone } from "@/lib/format";
 import {
   DELIVERY_ZONES as deliveryZones,
   PAYMENT_METHODS,
@@ -116,6 +119,8 @@ const paymentOptions: Array<{ value: (typeof PAYMENT_METHODS)[number]; label: st
   { value: "card", label: "Card", detail: "Visa or Mastercard" },
 ];
 
+const CART_STORAGE_KEY = "bels-kitchen-cart";
+
 const heroSlides = [
   {
     image: "/hero-slide-fried.webp",
@@ -151,6 +156,44 @@ export default function Home() {
   const [deliveryLocation, setDeliveryLocation] = useState("");
   const [submitted, setSubmitted] = useState<SavedOrder | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [heroPaused, setHeroPaused] = useState(false);
+  const [heroHovered, setHeroHovered] = useState(false);
+  const [cartLoaded, setCartLoaded] = useState(false);
+
+  // Restore the cart after a refresh (deferred so server and client markup match).
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const saved: unknown = JSON.parse(window.localStorage.getItem(CART_STORAGE_KEY) ?? "[]");
+        if (Array.isArray(saved)) {
+          setCart(
+            saved.filter(
+              (item): item is CartItem =>
+                typeof item?.key === "string" &&
+                meals.some((meal) => meal.id === item.mealId) &&
+                (PRICES as readonly number[]).includes(item.price) &&
+                Number.isInteger(item.quantity) &&
+                item.quantity > 0 &&
+                item.quantity <= 20,
+            ),
+          );
+        }
+      } catch {
+        // Storage unavailable or corrupted: start with an empty cart.
+      }
+      setCartLoaded(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!cartLoaded) return;
+    try {
+      window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+    } catch {
+      // Ignore: the cart simply will not survive a refresh.
+    }
+  }, [cart, cartLoaded]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -170,7 +213,7 @@ export default function Home() {
     heroApi.on("select", selectSlide);
     heroApi.on("reInit", selectSlide);
 
-    const timer = reduceMotion.matches
+    const timer = reduceMotion.matches || heroPaused || heroHovered
       ? undefined
       : window.setInterval(() => heroApi.scrollNext(), 5200);
 
@@ -179,7 +222,7 @@ export default function Home() {
       heroApi.off("reInit", selectSlide);
       if (timer) window.clearInterval(timer);
     };
-  }, [heroApi]);
+  }, [heroApi, heroPaused, heroHovered]);
 
   const itemCount = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity, 0),
@@ -233,8 +276,8 @@ export default function Home() {
 
   const submitCheckout = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!customerName.trim() || customerPhone.replace(/\D/g, "").length < 9) {
-      toast.error("Add your name and a valid phone number");
+    if (!customerName.trim() || !normalizeGhanaPhone(customerPhone)) {
+      toast.error("Add your name and a valid Ghana phone number");
       return;
     }
     if (orderType === "delivery" && !deliveryLocation.trim()) {
@@ -290,8 +333,6 @@ export default function Home() {
 
   return (
     <main>
-      <Toaster position="top-center" richColors />
-
       <nav className="site-nav" aria-label="Main navigation">
         <SiteBrand href="#top" />
         <div className="nav-links">
@@ -340,7 +381,7 @@ export default function Home() {
                 <div className="sms-preview"><span>SMS DEMO PREVIEW</span><p>{smsPreview}</p></div>
                 <p className="test-note">Demo mode: the order is stored and visible to the kitchen. No real money or SMS is sent yet.</p>
                 <Button asChild className="checkout-button">
-                  <a href={`/track?order=${submitted.orderNumber}`}>Track my order</a>
+                  <Link href={`/track?order=${submitted.orderNumber}`}>Track my order</Link>
                 </Button>
                 <button type="button" className="success-reset" onClick={resetCart}>Return to menu</button>
               </div>
@@ -443,6 +484,7 @@ export default function Home() {
                   {submitting ? "Sending order..." : "Confirm demo payment & order"}
                 </Button>
                 <p className="test-note">Payment and SMS are in demo mode. No money will be taken and no message will be sent yet.</p>
+                <p className="test-note">We keep your name and phone only to prepare your order. <Link href="/privacy">Privacy</Link></p>
               </form>
             ) : cart.length === 0 ? (
               <div className="empty-cart">
@@ -479,7 +521,15 @@ export default function Home() {
         </Sheet>
       </nav>
 
-      <section className="hero-slideshow" id="top" aria-label="Featured meals">
+      <section
+        className="hero-slideshow"
+        id="top"
+        aria-label="Featured meals"
+        onMouseEnter={() => setHeroHovered(true)}
+        onMouseLeave={() => setHeroHovered(false)}
+        onFocusCapture={() => setHeroHovered(true)}
+        onBlurCapture={() => setHeroHovered(false)}
+      >
         <Carousel
           className="hero-carousel"
           opts={{ loop: true, align: "start" }}
@@ -511,6 +561,14 @@ export default function Home() {
           </CarouselContent>
           <CarouselPrevious className="hero-arrow hero-arrow-previous" />
           <CarouselNext className="hero-arrow hero-arrow-next" />
+          <button
+            type="button"
+            className="hero-pause"
+            onClick={() => setHeroPaused((paused) => !paused)}
+            aria-label={heroPaused ? "Play featured meals slideshow" : "Pause featured meals slideshow"}
+          >
+            {heroPaused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
+          </button>
           <div className="hero-dots" aria-label="Choose featured meal">
             {heroSlides.map((slide, index) => (
               <button
@@ -602,7 +660,7 @@ export default function Home() {
 
       <footer>
         <SiteBrand href="#top" />
-        <p>Fresh rice meals, chicken and catering service.</p><a href="/track">Track my order</a><a href="/kitchen">Kitchen staff</a><a href="/admin">Restaurant admin</a><p>© 2026 Bel&apos;s Kitchen Catering Service</p>
+        <p>Fresh rice meals, chicken and catering service.</p><Link href="/track">Track my order</Link><Link href="/privacy">Privacy</Link><Link href="/kitchen">Kitchen staff</Link><Link href="/admin">Restaurant admin</Link><p>© 2026 Bel&apos;s Kitchen Catering Service</p>
       </footer>
     </main>
   );

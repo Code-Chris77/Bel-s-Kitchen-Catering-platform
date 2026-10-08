@@ -51,6 +51,11 @@ export function nextStatus(status: string, orderType: OrderType): OrderStatus | 
   return null;
 }
 
+/** The kitchen may cancel an order until it has left the kitchen. */
+export function canCancel(status: string) {
+  return status === "received" || status === "preparing" || status === "ready";
+}
+
 export function isMealId(value: string): value is MealId {
   return Object.hasOwn(MENU, value);
 }

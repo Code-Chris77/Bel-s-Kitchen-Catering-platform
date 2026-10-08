@@ -7,6 +7,9 @@
   "assets": {
     "binding": "ASSETS"
   },
+  "triggers": {
+    "crons": ["17 3 * * *"]
+  },
   "images": {
     "binding": "IMAGES"
   },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -20,10 +20,11 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Toaster } from "@/components/ui/sonner";
 import { SiteBrand } from "@/components/site-brand";
+import { usePolling } from "@/hooks/use-polling";
 import {
   ACTIVE_STATUSES,
+  canCancel,
   DELIVERY_ZONES,
   nextStatus,
   type OrderStatus,
@@ -78,6 +79,25 @@ function nextAction(order: KitchenOrder) {
   return status ? { status, label: actionLabels[status] } : null;
 }
 
+/** A short two-tone beep so a busy kitchen notices new tickets. */
+function playNewOrderChime() {
+  try {
+    const context = new AudioContext();
+    [880, 1175].forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.frequency.value = frequency;
+      gain.gain.value = 0.15;
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(context.currentTime + index * 0.18);
+      oscillator.stop(context.currentTime + index * 0.18 + 0.15);
+    });
+    window.setTimeout(() => void context.close(), 800);
+  } catch {
+    // Audio is optional (blocked by the browser or unsupported).
+  }
+}
+
 function timeLabel(value: string) {
   const date = new Date(value.endsWith("Z") ? value : `${value}Z`);
   if (Number.isNaN(date.getTime())) return value;
@@ -97,6 +117,7 @@ export default function KitchenPage() {
   const [error, setError] = useState("");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const knownOrderIds = useRef<Set<number> | null>(null);
 
   const loadOrders = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -113,6 +134,12 @@ export default function KitchenPage() {
         throw new Error(data.error || "The kitchen queue could not load.");
       }
       setAccess("granted");
+      const known = knownOrderIds.current;
+      if (known && data.orders.some((order) => !known.has(order.id))) {
+        playNewOrderChime();
+        toast.info("New order received");
+      }
+      knownOrderIds.current = new Set(data.orders.map((order) => order.id));
       setOrders(data.orders);
       setError("");
       setLastUpdated(new Date());
@@ -128,11 +155,7 @@ export default function KitchenPage() {
     return () => window.clearTimeout(initial);
   }, [loadOrders]);
 
-  useEffect(() => {
-    if (access !== "granted") return;
-    const interval = window.setInterval(() => void loadOrders(true), 7000);
-    return () => window.clearInterval(interval);
-  }, [access, loadOrders]);
+  usePolling(() => void loadOrders(true), 7000, access === "granted");
 
   const activeOrders = useMemo(
     () =>
@@ -248,7 +271,6 @@ export default function KitchenPage() {
 
   return (
     <main className="kitchen-page">
-      <Toaster position="top-center" richColors />
       <nav className="kitchen-nav">
         <SiteBrand />
         <Link className="kitchen-back" href="/"><ArrowLeft /> Customer menu</Link>
@@ -353,6 +375,20 @@ export default function KitchenPage() {
                             onClick={() => void updateStatus(order, action.status)}
                           >
                             {updatingId === order.id ? "Updating..." : action.label}
+                          </Button>
+                        )}
+                        {canCancel(order.status) && (
+                          <Button
+                            variant="outline"
+                            className="ticket-cancel"
+                            disabled={updatingId === order.id}
+                            onClick={() => {
+                              if (window.confirm(`Cancel order #${order.orderNumber}? This cannot be undone.`)) {
+                                void updateStatus(order, "cancelled");
+                              }
+                            }}
+                          >
+                            Cancel order
                           </Button>
                         )}
                       </article>

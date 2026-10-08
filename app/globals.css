@@ -326,6 +326,38 @@ a {
   transition: width 220ms ease, background 220ms ease;
 }
 
+.hero-pause {
+  position: absolute;
+  z-index: 4;
+  bottom: 3.05rem;
+  left: calc(7vw + 9rem);
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(246, 238, 227, 0.4);
+  border-radius: 999px;
+  background: rgba(22, 9, 4, 0.55);
+  color: #fff8f3;
+  cursor: pointer;
+}
+
+.hero-pause svg {
+  width: 14px;
+  height: 14px;
+}
+
+.hero-pause:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+.ticket-cancel {
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
 .hero-dots button.is-active {
   width: 58px;
   background: var(--ember);
@@ -3037,4 +3069,28 @@ footer .brand {
   .qr-copy p:not(.eyebrow) {
     color: #333;
   }
+}
+
+.admin-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.admin-export label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: rgba(255, 248, 243, 0.75);
+}
+
+.admin-export input {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgba(255, 248, 243, 0.25);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  color-scheme: dark;
 }

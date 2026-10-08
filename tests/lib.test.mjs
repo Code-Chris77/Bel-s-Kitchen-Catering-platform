@@ -19,6 +19,7 @@ after(async () => {
 
 const domain = await vite.ssrLoadModule("/lib/domain.ts");
 const crypto = await vite.ssrLoadModule("/lib/crypto.ts");
+const format = await vite.ssrLoadModule("/lib/format.ts");
 
 test("orders advance through the kitchen stages in order", () => {
   assert.equal(domain.nextStatus("received", "delivery"), "preparing");
@@ -84,4 +85,28 @@ test("cookieValue reads one cookie from the header", () => {
 
   assert.equal(crypto.cookieValue(request, "bels_kitchen_session"), "v2.9.x.y");
   assert.equal(crypto.cookieValue(request, "missing"), "");
+});
+
+test("orders can be cancelled only before they leave the kitchen", () => {
+  for (const status of ["received", "preparing", "ready"]) assert.ok(domain.canCancel(status));
+  for (const status of ["out_for_delivery", "delivered", "collected", "cancelled"]) {
+    assert.ok(!domain.canCancel(status));
+  }
+});
+
+test("Ghana phone numbers are normalised to +233", () => {
+  for (const input of ["024 000 0000", "0240000000", "240000000", "+233 24 000 0000", "233240000000"]) {
+    assert.equal(format.normalizeGhanaPhone(input), "+233240000000");
+  }
+});
+
+test("invalid phone numbers are rejected", () => {
+  for (const input of ["", "12345", "0140000000", "+44 7700 900123", "024000000"]) {
+    assert.equal(format.normalizeGhanaPhone(input), null);
+  }
+});
+
+test("cedis are formatted with the GH\u20b5 symbol", () => {
+  assert.equal(format.formatCedis(35), "GH\u20b535");
+  assert.match(format.formatCedis(1234), /^GH\u20b51,234$/);
 });
