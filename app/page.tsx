@@ -39,10 +39,14 @@ import {
 } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { SiteBrand } from "@/components/site-brand";
-
-type MealId = "fried" | "jollof" | "mixed";
-type OrderType = "delivery" | "dine_in";
-type DeliveryZone = "accra" | "tema" | "outside";
+import {
+  DELIVERY_ZONES as deliveryZones,
+  PAYMENT_METHODS,
+  PRICES,
+  type DeliveryZone,
+  type MealId,
+  type OrderType,
+} from "@/lib/domain";
 
 type Meal = {
   id: MealId;
@@ -103,15 +107,9 @@ const meals: Meal[] = [
   },
 ];
 
-const prices = [35, 40, 50];
+const prices = PRICES;
 
-const deliveryZones: Record<DeliveryZone, { label: string; fee: number }> = {
-  accra: { label: "Accra", fee: 30 },
-  tema: { label: "Tema", fee: 50 },
-  outside: { label: "Outside Accra", fee: 80 },
-};
-
-const paymentOptions = [
+const paymentOptions: Array<{ value: (typeof PAYMENT_METHODS)[number]; label: string; detail: string }> = [
   { value: "mtn", label: "MTN MoMo", detail: "Pay with your MTN number" },
   { value: "telecel", label: "Telecel Cash", detail: "Pay with your Telecel number" },
   { value: "at", label: "AT Money", detail: "Pay with your AT number" },
@@ -536,7 +534,7 @@ export default function Home() {
           <button type="button" className="order-path-card" onClick={() => startOrder("delivery")}>
             <span className="path-icon"><Bike /></span>
             <span className="path-copy"><small>OUTSIDE THE RESTAURANT</small><strong>Deliver to me</strong><span>Enter your name, phone, area and exact location. Your fee appears before payment.</span></span>
-            <span className="path-fees">Accra GH₵30 · Tema GH₵50 · Outside GH₵80</span>
+            <span className="path-fees">{Object.values(deliveryZones).map((zone) => `${zone.label} GH₵${zone.fee}`).join(" · ")}</span>
           </button>
           <button type="button" className="order-path-card dine-in" onClick={() => startOrder("dine_in")}>
             <span className="path-icon"><QrCode /></span>
@@ -569,7 +567,7 @@ export default function Home() {
               <div className="meal-copy"><p className="meal-accent">{meal.accent}</p><h3>{meal.name}</h3><p>{meal.note}</p></div>
               <div className="price-list" aria-label={`${meal.name} prices`}>
                 {prices.map((price) => (
-                  <button type="button" key={price} onClick={() => addToCart(meal.id, price)}><span>GH₵{price}</span><Plus aria-hidden="true" /></button>
+                  <button type="button" key={price} onClick={() => addToCart(meal.id, price)} aria-label={`Add ${meal.name}, GH₵${price} plate, to your order`}><span>GH₵{price}</span><Plus aria-hidden="true" /></button>
                 ))}
               </div>
             </article>

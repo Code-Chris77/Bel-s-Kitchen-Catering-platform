@@ -4,12 +4,15 @@ import {
   createAdminSessionCookie,
   hasAdminSession,
 } from "@/lib/admin-auth";
+import { LOGIN_LIMIT, allowRequest, tooManyRequests } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
   return Response.json({ authenticated: await hasAdminSession(request) });
 }
 
 export async function POST(request: Request) {
+  if (!(await allowRequest(request, LOGIN_LIMIT))) return tooManyRequests(LOGIN_LIMIT);
+
   try {
     const payload = (await request.json()) as { email?: string; password?: string };
     const email = typeof payload.email === "string" ? payload.email.slice(0, 180) : "";
