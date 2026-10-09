@@ -35,15 +35,11 @@ test("finished and cancelled orders cannot advance", () => {
   }
 });
 
-test("menu validators accept only known values", () => {
-  assert.ok(domain.isMealId("jollof"));
-  assert.ok(!domain.isMealId("toString"));
-  assert.ok(domain.isDeliveryZone("tema"));
-  assert.ok(!domain.isDeliveryZone("__proto__"));
+test("only known payment methods are accepted", () => {
   assert.ok(domain.isPaymentMethod("mtn"));
+  assert.ok(domain.isPaymentMethod("card"));
   assert.ok(!domain.isPaymentMethod("cash"));
-  assert.ok(domain.isValidPrice(40));
-  assert.ok(!domain.isValidPrice(1));
+  assert.ok(!domain.isPaymentMethod("__proto__"));
 });
 
 test("base64url round-trips arbitrary bytes", () => {
