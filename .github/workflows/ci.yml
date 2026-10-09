@@ -39,7 +39,7 @@ jobs:
           ADMIN_SESSION_SECRET=test-secret-admin-0123456789abcdef
           EOF
       - run: npm run test:e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: playwright-traces
