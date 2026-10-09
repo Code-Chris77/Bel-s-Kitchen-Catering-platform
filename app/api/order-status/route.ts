@@ -1,14 +1,9 @@
-import { getD1 } from "@/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { getDb } from "@/db";
+import { orders } from "@/db/schema";
+import { logError } from "@/lib/log";
 import { TRACKING_LIMIT, allowRequest, tooManyRequests } from "@/lib/rate-limit";
 import { hashTrackingCode, legacyHashTrackingCode } from "@/lib/tracking";
-
-type TrackingRow = {
-  id: number;
-  order_type: "delivery" | "dine_in";
-  status: string;
-  payment_status: string;
-  updated_at: string;
-};
 
 export async function POST(request: Request) {
   if (!(await allowRequest(request, TRACKING_LIMIT))) return tooManyRequests(TRACKING_LIMIT);
@@ -35,17 +30,23 @@ export async function POST(request: Request) {
       hashTrackingCode(trackingCode),
       legacyHashTrackingCode(trackingCode),
     ]);
-    const order = await getD1()
-      .prepare(
-        `SELECT id, order_type, status, payment_status, updated_at
-        FROM orders
-        WHERE id = ?
-          AND tracking_code_hash IN (?, ?)
-          AND payment_status IN ('paid', 'demo_paid')
-        LIMIT 1`,
+    const [order] = await getDb()
+      .select({
+        id: orders.id,
+        orderType: orders.orderType,
+        status: orders.status,
+        paymentStatus: orders.paymentStatus,
+        updatedAt: orders.updatedAt,
+      })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.id, orderNumber),
+          inArray(orders.trackingCodeHash, [keyedHash, legacyHash]),
+          inArray(orders.paymentStatus, ["paid", "demo_paid"]),
+        ),
       )
-      .bind(orderNumber, keyedHash, legacyHash)
-      .first<TrackingRow>();
+      .limit(1);
 
     if (!order) {
       return Response.json(
@@ -57,13 +58,14 @@ export async function POST(request: Request) {
     return Response.json({
       order: {
         orderNumber: order.id,
-        orderType: order.order_type,
+        orderType: order.orderType,
         status: order.status,
-        paymentStatus: order.payment_status,
-        updatedAt: order.updated_at,
+        paymentStatus: order.paymentStatus,
+        updatedAt: order.updatedAt,
       },
     });
-  } catch {
+  } catch (error) {
+    logError("order_status_failed", error);
     return Response.json(
       { error: "Your order progress could not be loaded. Please try again." },
       { status: 500 },

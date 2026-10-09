@@ -48,3 +48,7 @@ next-env.d.ts
 # local databases
 /.data/
 tsconfig.tsbuildinfo
+
+# playwright
+/test-results/
+/playwright-report/

@@ -4,6 +4,7 @@ import {
   createAdminSessionCookie,
   hasAdminSession,
 } from "@/lib/admin-auth";
+import { logError } from "@/lib/log";
 import { LOGIN_LIMIT, allowRequest, tooManyRequests } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
@@ -29,7 +30,8 @@ export async function POST(request: Request) {
         "Set-Cookie": await createAdminSessionCookie(),
       },
     });
-  } catch {
+  } catch (error) {
+    logError("admin_login_failed", error);
     return Response.json(
       { error: "Administrator access is unavailable. Please try again." },
       { status: 500 },

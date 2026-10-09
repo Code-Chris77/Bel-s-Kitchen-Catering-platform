@@ -1,13 +1,17 @@
-import { getD1 } from "@/db";
-import { ORDER_STATUSES, nextStatus, type OrderType } from "@/lib/domain";
-import { hasKitchenSession, kitchenUnauthorizedResponse } from "@/lib/kitchen-auth";
+import { and, eq, sql } from "drizzle-orm";
+import { getDb } from "@/db";
+import { orders } from "@/db/schema";
+import { ORDER_STATUSES, canCancel, nextStatus, type OrderStatus } from "@/lib/domain";
+import { getKitchenSession, kitchenUnauthorizedResponse } from "@/lib/kitchen-auth";
+import { logError } from "@/lib/log";
 
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    if (!(await hasKitchenSession(request))) return kitchenUnauthorizedResponse();
+    const session = await getKitchenSession(request);
+    if (!session) return kitchenUnauthorizedResponse();
 
     const { id } = await context.params;
     const orderId = Number(id);
@@ -21,18 +25,24 @@ export async function PATCH(
     ) {
       return Response.json({ error: "Invalid order update." }, { status: 400 });
     }
+    const target = status as OrderStatus;
 
-    const db = getD1();
-    const current = await db
-      .prepare("SELECT order_type, status FROM orders WHERE id = ? LIMIT 1")
-      .bind(orderId)
-      .first<{ order_type: OrderType; status: string }>();
+    const db = getDb();
+    const [current] = await db
+      .select({ orderType: orders.orderType, status: orders.status })
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
 
     if (!current) {
       return Response.json({ error: "Order not found." }, { status: 404 });
     }
 
-    if (status !== nextStatus(current.status, current.order_type)) {
+    const allowed =
+      target === "cancelled"
+        ? canCancel(current.status)
+        : target === nextStatus(current.status, current.orderType);
+    if (!allowed) {
       return Response.json(
         { error: "This order cannot move to that stage." },
         { status: 409 },
@@ -40,16 +50,13 @@ export async function PATCH(
     }
 
     // Compare-and-swap on the status we validated against, so two kitchen
-    // devices cannot both advance (or skip) the same order.
-    const result = await db
-      .prepare(
-        `UPDATE orders
-        SET status = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND status = ?
-        RETURNING id, status, updated_at`,
-      )
-      .bind(status, orderId, current.status)
-      .first<{ id: number; status: string; updated_at: string }>();
+    // devices cannot both advance (or skip) the same order. A database trigger
+    // records the change in order_events using `updated_by`.
+    const [result] = await db
+      .update(orders)
+      .set({ status: target, updatedAt: sql`CURRENT_TIMESTAMP`, updatedBy: session.actor })
+      .where(and(eq(orders.id, orderId), eq(orders.status, current.status)))
+      .returning({ id: orders.id, status: orders.status, updatedAt: orders.updatedAt });
 
     if (!result) {
       return Response.json(
@@ -63,10 +70,11 @@ export async function PATCH(
         id: result.id,
         orderNumber: result.id,
         status: result.status,
-        updatedAt: result.updated_at,
+        updatedAt: result.updatedAt,
       },
     });
-  } catch {
+  } catch (error) {
+    logError("order_update_failed", error);
     return Response.json({ error: "The order could not be updated." }, { status: 500 });
   }
 }

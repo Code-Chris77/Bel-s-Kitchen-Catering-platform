@@ -1,21 +1,21 @@
-import { getD1 } from "@/db";
+import { desc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { getDb } from "@/db";
+import { deliveryZones, orderItems, orders } from "@/db/schema";
 import {
   ACTIVE_STATUSES,
-  DELIVERY_ZONES,
   MAX_QUANTITY_PER_ITEM,
-  MENU,
   ORDER_TYPES,
-  isDeliveryZone,
-  isMealId,
   isPaymentMethod,
-  isValidPrice,
-  type DeliveryZone,
-  type MealId,
   type OrderType,
 } from "@/lib/domain";
-import { hasKitchenSession, kitchenUnauthorizedResponse } from "@/lib/kitchen-auth";
+import { normalizeGhanaPhone } from "@/lib/format";
+import { getKitchenSession, kitchenUnauthorizedResponse } from "@/lib/kitchen-auth";
+import { logError } from "@/lib/log";
+import { getMenu } from "@/lib/menu";
 import { ORDER_LIMIT, allowRequest, tooManyRequests } from "@/lib/rate-limit";
 import { createTrackingCode, hashTrackingCode } from "@/lib/tracking";
+
+const MAX_LINES_PER_ORDER = 20;
 
 type IncomingItem = {
   mealId?: string;
@@ -23,63 +23,38 @@ type IncomingItem = {
   quantity?: number;
 };
 
-type OrderRow = {
-  id: number;
-  order_type: OrderType;
-  status: string;
-  customer_name: string;
-  customer_phone: string;
-  delivery_zone: DeliveryZone | null;
-  delivery_location: string | null;
-  delivery_fee: number;
-  subtotal: number;
-  total: number;
-  payment_method: string;
-  payment_status: string;
-  tracking_code_hash?: string;
-  customer_sms_status: string;
-  chef_sms_status: string;
-  created_at: string;
-  updated_at: string;
-};
-
-type ItemRow = {
-  id: number;
-  order_id: number;
-  meal_id: MealId;
-  meal_name: string;
-  unit_price: number;
-  quantity: number;
-};
+type OrderRow = typeof orders.$inferSelect;
+type ItemRow = typeof orderItems.$inferSelect;
 
 function cleanText(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
-function publicOrder(row: OrderRow, items: ItemRow[] = []) {
+function publicOrder(row: OrderRow, items: ItemRow[] = [], zoneLabel: string | null = null) {
   return {
     id: row.id,
     orderNumber: row.id,
-    orderType: row.order_type,
+    orderType: row.orderType,
     status: row.status,
-    customerName: row.customer_name,
-    customerPhone: row.customer_phone,
-    deliveryZone: row.delivery_zone,
-    deliveryLocation: row.delivery_location,
-    deliveryFee: row.delivery_fee,
+    customerName: row.customerName,
+    customerPhone: row.customerPhone,
+    deliveryZone: row.deliveryZone,
+    deliveryZoneLabel: zoneLabel,
+    deliveryLocation: row.deliveryLocation,
+    deliveryFee: row.deliveryFee,
     subtotal: row.subtotal,
     total: row.total,
-    paymentMethod: row.payment_method,
-    paymentStatus: row.payment_status,
-    customerSmsStatus: row.customer_sms_status,
-    chefSmsStatus: row.chef_sms_status,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    paymentMethod: row.paymentMethod,
+    paymentStatus: row.paymentStatus,
+    customerSmsStatus: row.customerSmsStatus,
+    chefSmsStatus: row.chefSmsStatus,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
     items: items.map((item) => ({
       id: item.id,
-      mealId: item.meal_id,
-      mealName: item.meal_name,
-      price: item.unit_price,
+      mealId: item.mealId,
+      mealName: item.mealName,
+      price: item.unitPrice,
       quantity: item.quantity,
     })),
   };
@@ -94,50 +69,47 @@ function errorMessage(error: unknown) {
 }
 
 export async function GET(request: Request) {
-  if (!(await hasKitchenSession(request))) return kitchenUnauthorizedResponse();
+  if (!(await getKitchenSession(request))) return kitchenUnauthorizedResponse();
 
   try {
-    const db = getD1();
-    const orderResult = await db
-      .prepare(
-        `SELECT id, order_type, status, customer_name, customer_phone,
-          delivery_zone, delivery_location, delivery_fee, subtotal, total,
-          payment_method, payment_status, customer_sms_status, chef_sms_status,
-          created_at, updated_at
-        FROM orders
-        WHERE status IN (${ACTIVE_STATUSES.map((status) => `'${status}'`).join(", ")})
-          OR created_at >= datetime('now', '-2 days')
-        ORDER BY id DESC
-        LIMIT 200`,
+    const db = getDb();
+    const rows = await db
+      .select({ order: orders, zoneLabel: deliveryZones.label })
+      .from(orders)
+      .leftJoin(deliveryZones, eq(orders.deliveryZone, deliveryZones.id))
+      .where(
+        or(
+          inArray(orders.status, [...ACTIVE_STATUSES]),
+          gte(orders.createdAt, sql`datetime('now', '-2 days')`),
+        ),
       )
-      .all<OrderRow>();
+      .orderBy(desc(orders.id))
+      .limit(200);
 
-    const orders = orderResult.results ?? [];
-    if (orders.length === 0) {
+    if (rows.length === 0) {
       return Response.json({ orders: [] });
     }
 
-    const placeholders = orders.map(() => "?").join(", ");
-    const itemResult = await db
-      .prepare(
-        `SELECT id, order_id, meal_id, meal_name, unit_price, quantity
-        FROM order_items
-        WHERE order_id IN (${placeholders})
-        ORDER BY id ASC`,
-      )
-      .bind(...orders.map((order) => order.id))
-      .all<ItemRow>();
-    const items = itemResult.results ?? [];
+    // D1 allows at most 100 bound parameters per query, so fetch the items for the
+    // whole id range with one parameter instead of one per order.
+    const oldestId = rows[rows.length - 1].order.id;
+    const items = await db
+      .select()
+      .from(orderItems)
+      .where(gte(orderItems.orderId, oldestId))
+      .orderBy(orderItems.id);
 
     return Response.json({
-      orders: orders.map((order) =>
+      orders: rows.map(({ order, zoneLabel }) =>
         publicOrder(
           order,
-          items.filter((item) => item.order_id === order.id),
+          items.filter((item) => item.orderId === order.id),
+          zoneLabel,
         ),
       ),
     });
   } catch (error) {
+    logError("orders_list_failed", error);
     return Response.json({ error: errorMessage(error) }, { status: 500 });
   }
 }
@@ -160,119 +132,100 @@ export async function POST(request: Request) {
       ? (payload.orderType as OrderType)
       : null;
     const customerName = cleanText(payload.customerName, 80);
-    const customerPhone = cleanText(payload.customerPhone, 30);
-    const phoneDigits = customerPhone.replace(/\D/g, "");
+    const customerPhone = normalizeGhanaPhone(cleanText(payload.customerPhone, 30));
     const paymentMethod = cleanText(payload.paymentMethod, 20);
 
     if (!orderType) {
       return Response.json({ error: "Choose delivery or order at restaurant." }, { status: 400 });
     }
-    if (!customerName || phoneDigits.length < 9) {
-      return Response.json({ error: "Add your name and a valid phone number." }, { status: 400 });
+    if (!customerName || !customerPhone) {
+      return Response.json({ error: "Add your name and a valid Ghana phone number." }, { status: 400 });
     }
     if (!isPaymentMethod(paymentMethod)) {
       return Response.json({ error: "Choose a valid payment method." }, { status: 400 });
     }
 
-    const rawItems = Array.isArray(payload.items) ? payload.items : [];
-    const items = rawItems
-      .filter((item): item is IncomingItem => typeof item === "object" && item !== null)
-      .map((item) => ({
-        mealId: cleanText(item.mealId, 20),
-        price: Number(item.price),
-        quantity: Number(item.quantity),
-      }));
-    const validItems = items.flatMap((item) =>
-      isMealId(item.mealId) &&
-      isValidPrice(item.price) &&
-      Number.isInteger(item.quantity) &&
-      item.quantity >= 1 &&
-      item.quantity <= MAX_QUANTITY_PER_ITEM
-        ? [{ mealId: item.mealId as MealId, price: item.price, quantity: item.quantity }]
-        : [],
-    );
+    // Prices, meals and delivery fees always come from the database, never from the browser.
+    const menu = await getMenu();
+    const meals = new Map(menu.items.map((item) => [item.id, item.name]));
 
-    if (validItems.length === 0 || validItems.length !== rawItems.length) {
+    const rawItems = Array.isArray(payload.items) ? payload.items : [];
+    const validItems = rawItems.flatMap((item) => {
+      if (typeof item !== "object" || item === null) return [];
+      const mealId = cleanText(item.mealId, 40);
+      const price = Number(item.price);
+      const quantity = Number(item.quantity);
+      return meals.has(mealId) &&
+        menu.prices.includes(price) &&
+        Number.isInteger(quantity) &&
+        quantity >= 1 &&
+        quantity <= MAX_QUANTITY_PER_ITEM
+        ? [{ mealId, mealName: meals.get(mealId) as string, price, quantity }]
+        : [];
+    });
+
+    if (
+      validItems.length === 0 ||
+      validItems.length !== rawItems.length ||
+      validItems.length > MAX_LINES_PER_ORDER
+    ) {
       return Response.json({ error: "Your order contains an invalid menu item." }, { status: 400 });
     }
 
-    const zoneInput = orderType === "delivery" ? cleanText(payload.deliveryZone, 20) : "";
-    const deliveryZone: DeliveryZone | null = isDeliveryZone(zoneInput) ? zoneInput : null;
+    const zone =
+      orderType === "delivery"
+        ? menu.zones.find((candidate) => candidate.id === cleanText(payload.deliveryZone, 40))
+        : undefined;
     const deliveryLocation =
       orderType === "delivery" ? cleanText(payload.deliveryLocation, 220) : "";
 
-    if (orderType === "delivery" && (!deliveryZone || !deliveryLocation)) {
+    if (orderType === "delivery" && (!zone || !deliveryLocation)) {
       return Response.json(
         { error: "Choose your delivery area and enter a delivery location." },
         { status: 400 },
       );
     }
 
-    const deliveryFee = deliveryZone ? DELIVERY_ZONES[deliveryZone].fee : 0;
-    const subtotal = validItems.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0,
-    );
+    const deliveryFee = zone?.fee ?? 0;
+    const subtotal = validItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const total = subtotal + deliveryFee;
-    const db = getD1();
+    const db = getDb();
     const trackingCode = createTrackingCode();
     const trackingCodeHash = await hashTrackingCode(trackingCode);
 
     // One batch = one transaction: the order and all its items are saved
     // together or not at all. Inside a batch nothing else can write, so the
     // sequence value is the id of the order inserted by the first statement.
-    const newOrderId = "(SELECT seq FROM sqlite_sequence WHERE name = 'orders')";
+    const newOrderId = sql`(SELECT seq FROM sqlite_sequence WHERE name = 'orders')`;
     const [orderResult, , itemResult] = await db.batch([
       db
-        .prepare(
-          `INSERT INTO orders (
-            order_type, customer_name, customer_phone, delivery_zone,
-            delivery_location, delivery_fee, subtotal, total, payment_method,
-            tracking_code_hash
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          RETURNING id, order_type, status, customer_name, customer_phone,
-            delivery_zone, delivery_location, delivery_fee, subtotal, total,
-            payment_method, payment_status, customer_sms_status, chef_sms_status,
-            created_at, updated_at`,
-        )
-        .bind(
+        .insert(orders)
+        .values({
           orderType,
           customerName,
           customerPhone,
-          deliveryZone,
-          deliveryLocation || null,
+          deliveryZone: zone?.id ?? null,
+          deliveryLocation: deliveryLocation || null,
           deliveryFee,
           subtotal,
           total,
           paymentMethod,
           trackingCodeHash,
-        ),
-      db
-        .prepare(
-          `INSERT INTO order_items (order_id, meal_id, meal_name, unit_price, quantity)
-          SELECT ${newOrderId}, json_extract(value, '$.m'), json_extract(value, '$.n'),
-            json_extract(value, '$.p'), json_extract(value, '$.q')
-          FROM json_each(?)`,
-        )
-        .bind(
-          JSON.stringify(
-            validItems.map((item) => ({
-              m: item.mealId,
-              n: MENU[item.mealId],
-              p: item.price,
-              q: item.quantity,
-            })),
-          ),
-        ),
-      db.prepare(
-        `SELECT id, order_id, meal_id, meal_name, unit_price, quantity
-        FROM order_items
-        WHERE order_id = ${newOrderId}
-        ORDER BY id ASC`,
+        })
+        .returning(),
+      db.insert(orderItems).values(
+        validItems.map((item) => ({
+          orderId: newOrderId as unknown as number,
+          mealId: item.mealId,
+          mealName: item.mealName,
+          unitPrice: item.price,
+          quantity: item.quantity,
+        })),
       ),
+      db.select().from(orderItems).where(eq(orderItems.orderId, newOrderId)).orderBy(orderItems.id),
     ]);
 
-    const order = orderResult.results?.[0] as OrderRow | undefined;
+    const order = orderResult[0];
     if (!order) {
       throw new Error("Order insert returned no row");
     }
@@ -283,7 +236,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         order: {
-          ...publicOrder(order, (itemResult.results ?? []) as ItemRow[]),
+          ...publicOrder(order, itemResult, zone?.label ?? null),
           trackingCode,
           smsMessage,
         },
@@ -291,7 +244,7 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
-    console.error("Order could not be saved", error instanceof Error ? error.message : error);
+    logError("order_create_failed", error);
     return Response.json({ error: errorMessage(error) }, { status: 500 });
   }
 }

@@ -11,7 +11,8 @@ React 19, Tailwind CSS 4, shadcn/ui, and Cloudflare Workers + D1 with Drizzle OR
 | `/` | Customer menu, cart and checkout (delivery or restaurant pickup) |
 | `/track` | Order progress, opened with the order number and 6-digit tracking password |
 | `/kitchen` | Password-protected kitchen queue for chefs |
-| `/admin` | Admin login, revenue dashboard and kitchen-password management |
+| `/admin` | Admin login, revenue dashboard, CSV export, menu/price/delivery editor, staff accounts and security settings |
+| `/privacy` | What customer data is kept and for how long |
 
 ## Requirements
 
@@ -36,7 +37,7 @@ Set in `.dev.vars` locally and with `npx wrangler secret put NAME` in production
 
 | Name | Purpose |
 | --- | --- |
-| `KITCHEN_PASSWORD` | Initial kitchen password. Ignored once an admin sets one in `/admin`. |
+| `KITCHEN_PASSWORD` | Initial shared kitchen password. Ignored once an admin sets one in `/admin`, and stops working entirely once staff accounts exist. |
 | `KITCHEN_SESSION_SECRET` | Signs kitchen sessions. Required. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Admin login. |
 | `ADMIN_SESSION_SECRET` | Signs admin sessions. Required. |
@@ -52,7 +53,8 @@ Use long random values for every secret.
 | `npm run build` | Production build into `dist/` |
 | `npm run typecheck` | TypeScript check |
 | `npm run lint` | ESLint |
-| `npm test` | Build, then run the tests in `tests/` |
+| `npm test` | Build, then run the unit and worker tests in `tests/` |
+| `npm run test:e2e` | Playwright browser tests in `e2e/` (needs `.dev.vars`; starts its own dev server and fresh local database) |
 | `npm run db:generate` | Generate a migration after editing `db/schema.ts` |
 | `npm run db:migrate:local` / `db:migrate:remote` | Apply migrations to local / production D1 |
 | `npm run cf-typegen` | Regenerate `worker-configuration.d.ts` after editing `wrangler.jsonc` |
@@ -65,27 +67,37 @@ Use long random values for every secret.
 3. Add each secret above with `npx wrangler secret put`.
 4. `npm run deploy`
 
-CI (`.github/workflows/ci.yml`) runs typecheck, lint and tests on every push and pull request.
+CI (`.github/workflows/ci.yml`) runs typecheck, lint and tests on every push and pull request; CodeQL and Dependabot are enabled.
+`.github/workflows/deploy.yml` can deploy manually once `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets exist.
+
+A daily Cron Trigger (`wrangler.jsonc`) anonymises customer names, phone numbers and delivery locations on orders older than 90 days (`lib/retention.ts`).
 
 ## Project layout
 
 | Folder | Contents |
 | --- | --- |
 | `app/` | Pages and API routes |
-| `components/` | Brand component and shadcn/ui primitives |
+| `components/` | Brand component and the shadcn/ui primitives in use |
+| `hooks/` | Shared React hooks (visibility-aware polling) |
+| `branding/` | Full-resolution original logo (the site serves a resized copy from `public/`) |
 | `db/` | D1 access and Drizzle schema |
 | `drizzle/` | SQL migrations |
-| `lib/` | Menu/status rules (`domain.ts`), auth, tracking codes, rate limiting, crypto helpers |
+| `lib/` | Status rules (`domain.ts`), menu queries, auth, staff, tracking codes, rate limiting, crypto helpers |
 | `worker/` | Worker entry: image optimisation, security headers, cross-site write protection |
-| `tests/` | Node test runner suites |
+| `tests/` | Node test runner suites (unit and worker) |
+| `e2e/` | Playwright end-to-end tests; `e2e/visual/` holds screenshot helpers for CSS refactors (`VISUAL=1 SHOT_DIR=…`) |
 
-Menu items, prices, delivery fees, payment methods and the order-status flow are
-defined once in `lib/domain.ts`.
+The menu, plate prices and delivery areas live in D1 and are edited in `/admin` (hidden, never deleted);
+payment methods and the order-status flow are defined once in `lib/domain.ts`.
+Styles are split by area: `app/globals.css` (base), `home.css`, `kitchen.css`, `tracking.css`, `admin.css`.
 
 ## Security notes
 
 - Sessions are signed, `HttpOnly; Secure; SameSite=Strict` cookies.
 - Login, order creation and order tracking are rate limited per IP (D1-backed, `lib/rate-limit.ts`).
+- Admins can create individual staff accounts (`/admin`). Each chef then signs in with their own name and password, status changes are attributed to them in `order_events`, and disabling an account ends its sessions immediately. "Sign out all admin devices" revokes every admin session.
+- Database triggers reject invalid order types, statuses, payment methods and amounts, and write the `order_events` audit trail.
+- Kitchen staff can cancel an order until it leaves the kitchen; every status change is recorded in `order_events`.
 - Tracking codes are stored as keyed HMACs; kitchen passwords as salted PBKDF2.
 - The worker sets CSP, HSTS and related headers, marks `/admin`, `/kitchen` and `/track` as `noindex`,
   and rejects cross-origin writes to `/api/*`.

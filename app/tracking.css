@@ -1,0 +1,267 @@
+/* tracking styles, split out of globals.css. Class names are global; keep selectors area-specific. */
+.tracking-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(219, 144, 12, 0.15), transparent 24rem),
+    radial-gradient(circle at 90% 90%, rgba(217, 79, 47, 0.08), transparent 26rem),
+    #0b0907;
+}
+.tracking-nav {
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4vw;
+  border-bottom: 1px solid rgba(246, 238, 227, 0.11);
+  background: rgba(9, 7, 5, 0.84);
+  backdrop-filter: blur(18px);
+}
+.tracking-shell {
+  display: grid;
+  min-height: calc(100vh - 76px);
+  place-items: center;
+  padding: clamp(2rem, 6vw, 5rem) 1rem;
+}
+.tracking-login,
+.tracking-card {
+  width: min(100%, 590px);
+  border: 1px solid rgba(246, 238, 227, 0.13);
+  border-radius: 1.5rem;
+  background: rgba(21, 17, 13, 0.94);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
+}
+.tracking-login {
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+  text-align: center;
+}
+.tracking-login h1,
+.tracking-card h1 {
+  margin: 0.45rem 0 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(3rem, 8vw, 5.2rem);
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+}
+.tracking-login form {
+  display: grid;
+  gap: 0.7rem;
+  text-align: left;
+}
+.tracking-login form > label {
+  margin-top: 0.55rem;
+  color: var(--cream);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.tracking-number-input {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  min-height: 56px;
+  align-items: center;
+  border: 1px solid rgba(246, 238, 227, 0.16);
+  border-radius: 0.9rem;
+  background: rgba(246, 238, 227, 0.04);
+  overflow: hidden;
+}
+.tracking-number-input:focus-within {
+  border-color: var(--ember);
+  box-shadow: 0 0 0 3px rgba(219, 144, 12, 0.12);
+}
+.tracking-number-input span {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  border-right: 1px solid rgba(246, 238, 227, 0.12);
+  color: var(--ember);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.4rem;
+}
+.tracking-number-input input {
+  width: 100%;
+  height: 100%;
+  padding: 0 1rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--cream);
+  font-size: 1.1rem;
+}
+.tracking-otp {
+  width: 100%;
+}
+.tracking-otp [data-slot="input-otp-group"] {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.45rem;
+}
+.tracking-otp [data-slot="input-otp-slot"] {
+  width: auto;
+  height: 56px;
+  border: 1px solid rgba(246, 238, 227, 0.16);
+  border-radius: 0.75rem;
+  background: rgba(246, 238, 227, 0.04);
+  color: var(--cream);
+  font-size: 1.15rem;
+  box-shadow: none;
+}
+.tracking-otp [data-active="true"] {
+  border-color: var(--ember);
+}
+.tracking-privacy {
+  margin: 1.4rem 0 0;
+  color: rgba(246, 238, 227, 0.46);
+  font-size: 0.7rem;
+}
+.tracking-card {
+  padding: clamp(1.3rem, 4vw, 2.4rem);
+}
+.tracking-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.tracking-order-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(219, 144, 12, 0.1);
+  color: var(--ember);
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+.tracking-order-type svg {
+  width: 15px;
+}
+.current-status {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin: 2rem 0 1.5rem;
+  padding: 1.2rem;
+  border: 1px solid rgba(219, 144, 12, 0.25);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(219, 144, 12, 0.12), rgba(219, 144, 12, 0.035));
+}
+.current-status > span {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ember);
+  color: var(--ink);
+}
+.current-status > span svg {
+  width: 22px;
+}
+.current-status small {
+  color: var(--ember);
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+}
+.current-status h2 {
+  margin: 0.18rem 0 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 2rem;
+  font-weight: 500;
+}
+.current-status p {
+  margin: 0.35rem 0 0;
+  color: var(--smoke);
+  font-size: 0.78rem;
+}
+.tracking-card [data-slot="progress"] {
+  height: 7px;
+  margin-bottom: 1.6rem;
+  background: rgba(246, 238, 227, 0.1);
+}
+.tracking-card [data-slot="progress-indicator"] {
+  background: var(--ember);
+}
+.tracking-stages {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tracking-stages li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 0.8rem;
+  min-height: 68px;
+  color: rgba(246, 238, 227, 0.32);
+}
+.tracking-stages li:not(:last-child)::after {
+  position: absolute;
+  top: 34px;
+  bottom: 0;
+  left: 18px;
+  width: 1px;
+  background: rgba(246, 238, 227, 0.12);
+  content: "";
+}
+.tracking-stages li > span {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid rgba(246, 238, 227, 0.13);
+  border-radius: 50%;
+  background: #15110d;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+.tracking-stages li > span svg {
+  width: 16px;
+}
+.tracking-stages li > div {
+  display: grid;
+  align-content: start;
+  gap: 0.28rem;
+  padding-top: 0.25rem;
+}
+.tracking-stages strong {
+  font-size: 0.88rem;
+}
+.tracking-stages small {
+  color: rgba(246, 238, 227, 0.42);
+  font-size: 0.69rem;
+}
+.tracking-refresh svg {
+  width: 15px;
+}
+.tracking-cancelled {
+  text-align: center;
+}
+@media (max-width: 620px) {
+.tracking-nav {
+    padding: 0 1rem;
+  }
+.tracking-login,
+  .tracking-card {
+    border-radius: 1.15rem;
+  }
+.tracking-otp [data-slot="input-otp-group"] {
+    gap: 0.25rem;
+  }
+.tracking-otp [data-slot="input-otp-slot"] {
+    height: 50px;
+    border-radius: 0.6rem;
+  }
+.tracking-card-top h1 {
+    font-size: 4rem;
+  }
+}

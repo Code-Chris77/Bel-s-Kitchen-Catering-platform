@@ -1,6 +1,7 @@
 /** Cloudflare Worker entry point. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { purgeExpiredData } from "../lib/retention";
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -44,6 +45,10 @@ function withSecurityHeaders(request: Request, url: URL, response: Response) {
   if (url.pathname.startsWith("/api/")) {
     headers.set("Cache-Control", "no-store");
   }
+  // Build output is content-hashed, so it can be cached forever.
+  if (url.pathname.startsWith("/assets/") && response.ok && !headers.has("Cache-Control")) {
+    headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  }
   if (isPrivatePage(url.pathname)) {
     headers.set("X-Robots-Tag", "noindex, nofollow");
     headers.set("Cache-Control", "no-store");
@@ -72,6 +77,15 @@ const worker = {
     }
 
     return withSecurityHeaders(request, url, await handler.fetch(request, env, ctx));
+  },
+
+  /** Daily cron (see wrangler.jsonc): anonymise old customer details, clear stale rate-limit rows. */
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(
+      purgeExpiredData(env.DB).then((result) =>
+        console.log(JSON.stringify({ event: "retention_purge", ...result })),
+      ),
+    );
   },
 };
 

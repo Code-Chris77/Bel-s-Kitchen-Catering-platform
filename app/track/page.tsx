@@ -21,7 +21,10 @@ import {
 } from "@/components/ui/input-otp";
 import { Progress } from "@/components/ui/progress";
 import { SiteBrand } from "@/components/site-brand";
+import { usePolling } from "@/hooks/use-polling";
 import type { OrderStatus, OrderType } from "@/lib/domain";
+
+import "../tracking.css";
 
 type TrackedOrder = {
   orderNumber: number;
@@ -104,11 +107,7 @@ export default function TrackOrderPage() {
   const finished =
     order?.status === "collected" || order?.status === "delivered" || order?.status === "cancelled";
 
-  useEffect(() => {
-    if (!order || finished) return;
-    const interval = window.setInterval(() => void loadProgress(true), 5000);
-    return () => window.clearInterval(interval);
-  }, [finished, loadProgress, order]);
+  usePolling(() => void loadProgress(true), 5000, Boolean(order) && !finished);
 
   const terminal = order?.status === "collected" || order?.status === "delivered";
 

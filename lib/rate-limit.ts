@@ -1,4 +1,7 @@
-import { getD1 } from "@/db";
+import { lt, sql } from "drizzle-orm";
+import { getDb } from "@/db";
+import { rateLimits } from "@/db/schema";
+import { logError } from "@/lib/log";
 
 type Bucket = { name: string; limit: number; windowSeconds: number };
 
@@ -19,26 +22,19 @@ export async function allowRequest(request: Request, bucket: Bucket) {
   try {
     const now = Math.floor(Date.now() / 1000);
     const window = Math.floor(now / bucket.windowSeconds);
-    const db = getD1();
-    const row = await db
-      .prepare(
-        `INSERT INTO rate_limits (key, window_start, count)
-        VALUES (?, ?, 1)
-        ON CONFLICT(key) DO UPDATE SET count = count + 1
-        RETURNING count`,
-      )
-      .bind(`${bucket.name}:${clientId(request)}:${window}`, now)
-      .first<{ count: number }>();
+    const db = getDb();
+    const [row] = await db
+      .insert(rateLimits)
+      .values({ key: `${bucket.name}:${clientId(request)}:${window}`, windowStart: now, count: 1 })
+      .onConflictDoUpdate({ target: rateLimits.key, set: { count: sql`${rateLimits.count} + 1` } })
+      .returning({ count: rateLimits.count });
 
     if (Math.random() < 0.02) {
-      await db
-        .prepare("DELETE FROM rate_limits WHERE window_start < ?")
-        .bind(now - 86_400)
-        .run();
+      await db.delete(rateLimits).where(lt(rateLimits.windowStart, now - 86_400));
     }
     return (row?.count ?? 1) <= bucket.limit;
   } catch (error) {
-    console.error("Rate limiter unavailable", error instanceof Error ? error.message : error);
+    logError("rate_limiter_unavailable", error);
     return true;
   }
 }

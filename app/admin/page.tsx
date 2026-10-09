@@ -30,8 +30,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Toaster } from "@/components/ui/sonner";
+import { MenuEditor } from "@/components/admin/menu-editor";
+import { StaffManager } from "@/components/admin/staff-manager";
 import { SiteBrand } from "@/components/site-brand";
+import { formatCedis } from "@/lib/format";
+
+import "../admin.css";
 
 type Summary = {
   todayRevenue: number;
@@ -95,9 +99,7 @@ const statusLabels: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-function money(value: number) {
-  return `GH₵${Math.round(value).toLocaleString("en-GH")}`;
-}
+const money = formatCedis;
 
 function dateTimeLabel(value: string) {
   const date = new Date(value.endsWith("Z") ? value : `${value}Z`);
@@ -169,6 +171,17 @@ export default function AdminPage() {
     if (!dashboard.summary.todayOrders) return 0;
     return dashboard.summary.todayRevenue / dashboard.summary.todayOrders;
   }, [dashboard.summary]);
+
+  const signOutEverywhere = async () => {
+    if (!window.confirm("Sign out every admin session, including this one?")) return;
+    const response = await fetch("/api/admin-settings/sign-out-everywhere", { method: "POST" });
+    if (!response.ok) {
+      toast.error("Sessions could not be ended. Please try again.");
+      return;
+    }
+    setDashboard(emptyDashboard);
+    setAccess("locked");
+  };
 
   const submitLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -299,7 +312,6 @@ export default function AdminPage() {
 
   return (
     <main className="admin-page">
-      <Toaster position="top-center" richColors />
       <nav className="admin-nav">
         <SiteBrand admin />
         <div className="admin-nav-actions">
@@ -344,6 +356,11 @@ export default function AdminPage() {
 
       <section className="admin-workspace">
         <div className="admin-records-card">
+          <form className="admin-export" method="get" action="/api/admin-export">
+            <label>From <input type="date" name="from" /></label>
+            <label>To <input type="date" name="to" /></label>
+            <Button type="submit" variant="outline">Download CSV</Button>
+          </form>
           <Tabs defaultValue="daily">
             <div className="admin-card-heading">
               <div><p className="eyebrow">TRANSACTION RECORDS</p><h2>Money and orders.</h2></div>
@@ -436,7 +453,17 @@ export default function AdminPage() {
             </Button>
           </form>
           <div className="admin-security-note"><ShieldCheck /><span>The password is securely stored and is never shown in the financial records.</span></div>
+          <h3 className="admin-subheading">Sign out everywhere</h3>
+          <p>Ends every open admin session on every device, including this one.</p>
+          <Button variant="outline" type="button" onClick={() => void signOutEverywhere()}>
+            Sign out all admin devices
+          </Button>
         </aside>
+      </section>
+
+      <section className="admin-extra">
+        <StaffManager />
+        <MenuEditor />
       </section>
     </main>
   );

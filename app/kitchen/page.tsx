@@ -1,59 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Bike,
   Check,
   Clock3,
-  KeyRound,
   LogOut,
-  MapPin,
   Phone,
   Printer,
   QrCode,
   RefreshCw,
-  ShoppingBag,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Toaster } from "@/components/ui/sonner";
+import { KitchenLogin } from "@/components/kitchen/kitchen-login";
+import { timeLabel, type KitchenOrder } from "@/components/kitchen/kitchen-order";
+import { OrderTicket } from "@/components/kitchen/order-ticket";
 import { SiteBrand } from "@/components/site-brand";
+import { usePolling } from "@/hooks/use-polling";
 import {
   ACTIVE_STATUSES,
-  DELIVERY_ZONES,
   nextStatus,
   type OrderStatus,
-  type OrderType,
 } from "@/lib/domain";
 
-type KitchenOrder = {
-  id: number;
-  orderNumber: number;
-  orderType: OrderType;
-  status: OrderStatus;
-  customerName: string;
-  customerPhone: string;
-  deliveryZone: "accra" | "tema" | "outside" | null;
-  deliveryLocation: string | null;
-  deliveryFee: number;
-  subtotal: number;
-  total: number;
-  paymentMethod: string;
-  paymentStatus: string;
-  customerSmsStatus: string;
-  chefSmsStatus: string;
-  createdAt: string;
-  items: Array<{
-    id: number;
-    mealName: string;
-    price: number;
-    quantity: number;
-  }>;
-};
+import "../kitchen.css";
 
 const columns: Array<{
   status: OrderStatus;
@@ -78,18 +52,30 @@ function nextAction(order: KitchenOrder) {
   return status ? { status, label: actionLabels[status] } : null;
 }
 
-function timeLabel(value: string) {
-  const date = new Date(value.endsWith("Z") ? value : `${value}Z`);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-GH", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
+/** A short two-tone beep so a busy kitchen notices new tickets. */
+function playNewOrderChime() {
+  try {
+    const context = new AudioContext();
+    [880, 1175].forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.frequency.value = frequency;
+      gain.gain.value = 0.15;
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(context.currentTime + index * 0.18);
+      oscillator.stop(context.currentTime + index * 0.18 + 0.15);
+    });
+    window.setTimeout(() => void context.close(), 800);
+  } catch {
+    // Audio is optional (blocked by the browser or unsupported).
+  }
 }
 
 export default function KitchenPage() {
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [access, setAccess] = useState<"checking" | "granted" | "locked">("checking");
+  const [staffName, setStaffName] = useState("");
+  const [staffRequired, setStaffRequired] = useState(false);
   const [password, setPassword] = useState("");
   const [signingIn, setSigningIn] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -97,6 +83,7 @@ export default function KitchenPage() {
   const [error, setError] = useState("");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const knownOrderIds = useRef<Set<number> | null>(null);
 
   const loadOrders = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -104,6 +91,10 @@ export default function KitchenPage() {
       const response = await fetch("/api/orders", { cache: "no-store" });
       const data = (await response.json()) as { orders?: KitchenOrder[]; error?: string };
       if (response.status === 401) {
+        const status = (await (await fetch("/api/kitchen-auth", { cache: "no-store" })).json()) as {
+          staffRequired?: boolean;
+        };
+        setStaffRequired(Boolean(status.staffRequired));
         setAccess("locked");
         setOrders([]);
         setError("");
@@ -113,6 +104,12 @@ export default function KitchenPage() {
         throw new Error(data.error || "The kitchen queue could not load.");
       }
       setAccess("granted");
+      const known = knownOrderIds.current;
+      if (known && data.orders.some((order) => !known.has(order.id))) {
+        playNewOrderChime();
+        toast.info("New order received");
+      }
+      knownOrderIds.current = new Set(data.orders.map((order) => order.id));
       setOrders(data.orders);
       setError("");
       setLastUpdated(new Date());
@@ -128,11 +125,7 @@ export default function KitchenPage() {
     return () => window.clearTimeout(initial);
   }, [loadOrders]);
 
-  useEffect(() => {
-    if (access !== "granted") return;
-    const interval = window.setInterval(() => void loadOrders(true), 7000);
-    return () => window.clearInterval(interval);
-  }, [access, loadOrders]);
+  usePolling(() => void loadOrders(true), 7000, access === "granted");
 
   const activeOrders = useMemo(
     () =>
@@ -177,7 +170,7 @@ export default function KitchenPage() {
       const response = await fetch("/api/kitchen-auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ name: staffName, password }),
       });
       const data = (await response.json()) as { authenticated?: boolean; error?: string };
       if (!response.ok || !data.authenticated) {
@@ -210,45 +203,23 @@ export default function KitchenPage() {
           <Link className="kitchen-back" href="/"><ArrowLeft /> Customer menu</Link>
         </nav>
 
-        <section className="kitchen-login-shell">
-          <div className="kitchen-login-card">
-            <span className="tracking-icon" aria-hidden="true"><KeyRound /></span>
-            <p className="eyebrow">KITCHEN STAFF ONLY</p>
-            <h1>{access === "checking" ? "Opening kitchen…" : "Enter the kitchen."}</h1>
-            {access === "checking" ? (
-              <p>Checking your secure kitchen session.</p>
-            ) : (
-              <>
-                <p>Enter the staff password to see paid orders and update their progress.</p>
-                <form onSubmit={submitLogin}>
-                  <label htmlFor="kitchen-password">Kitchen password</label>
-                  <input
-                    id="kitchen-password"
-                    type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    autoComplete="current-password"
-                    placeholder="Enter staff password"
-                    required
-                    autoFocus
-                  />
-                  {loginError && <p className="tracking-error" role="alert">{loginError}</p>}
-                  <Button type="submit" className="tracking-submit" disabled={signingIn || !password}>
-                    {signingIn ? "Unlocking…" : "Open kitchen queue"}
-                  </Button>
-                </form>
-                <small>Customer tracking passwords cannot open this staff screen.</small>
-              </>
-            )}
-          </div>
-        </section>
+        <KitchenLogin
+          checking={access === "checking"}
+          staffRequired={staffRequired}
+          staffName={staffName}
+          onStaffName={setStaffName}
+          password={password}
+          onPassword={setPassword}
+          signingIn={signingIn}
+          error={loginError}
+          onSubmit={submitLogin}
+        />
       </main>
     );
   }
 
   return (
     <main className="kitchen-page">
-      <Toaster position="top-center" richColors />
       <nav className="kitchen-nav">
         <SiteBrand />
         <Link className="kitchen-back" href="/"><ArrowLeft /> Customer menu</Link>
@@ -321,41 +292,13 @@ export default function KitchenPage() {
                   columnOrders.map((order) => {
                     const action = nextAction(order);
                     return (
-                      <article className="order-ticket" key={order.id}>
-                        <div className="ticket-top">
-                          <div className="ticket-number"><small>ORDER</small><strong>#{order.orderNumber}</strong></div>
-                          <span className={`ticket-type ${order.orderType}`}>
-                            {order.orderType === "delivery" ? <Bike /> : <ShoppingBag />}
-                            {order.orderType === "delivery" ? "Delivery" : "Restaurant"}
-                          </span>
-                        </div>
-                        <div className="ticket-customer">
-                          <strong>{order.customerName}</strong>
-                          <a href={`tel:${order.customerPhone}`}><Phone /> {order.customerPhone}</a>
-                        </div>
-                        <ul className="ticket-items">
-                          {order.items.map((item) => (
-                            <li key={item.id}><span>{item.quantity}× {item.mealName}</span><strong>GH₵{item.price}</strong></li>
-                          ))}
-                        </ul>
-                        {order.orderType === "delivery" && (
-                          <div className="ticket-location">
-                            <MapPin />
-                            <span><strong>{order.deliveryZone ? DELIVERY_ZONES[order.deliveryZone].label : "Delivery"}</strong>{order.deliveryLocation}</span>
-                          </div>
-                        )}
-                        <div className="ticket-total"><span>{timeLabel(order.createdAt)}</span><strong>GH₵{order.total}</strong></div>
-                        <div className="ticket-sms"><Phone /> SMS demo prepared for customer</div>
-                        {action && (
-                          <Button
-                            className="ticket-action"
-                            disabled={updatingId === order.id}
-                            onClick={() => void updateStatus(order, action.status)}
-                          >
-                            {updatingId === order.id ? "Updating..." : action.label}
-                          </Button>
-                        )}
-                      </article>
+                      <OrderTicket
+                        key={order.id}
+                        order={order}
+                        action={action}
+                        updating={updatingId === order.id}
+                        onUpdate={(status) => void updateStatus(order, status)}
+                      />
                     );
                   })
                 )}

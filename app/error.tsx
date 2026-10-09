@@ -2,6 +2,8 @@
 
 import { Button } from "@/components/ui/button";
 
+import "./tracking.css";
+
 export default function Error({ reset }: { error: Error; reset: () => void }) {
   return (
     <main className="tracking-page">
