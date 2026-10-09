@@ -1,17 +1,8 @@
-import { getD1 } from "@/db";
+import { and, desc, gte, inArray, lt, sql } from "drizzle-orm";
+import { getDb } from "@/db";
+import { orders } from "@/db/schema";
 import { adminUnauthorizedResponse, hasAdminSession } from "@/lib/admin-auth";
 import { logError } from "@/lib/log";
-
-type ExportRow = {
-  id: number;
-  created_at: string;
-  order_type: string;
-  status: string;
-  payment_method: string;
-  subtotal: number;
-  delivery_fee: number;
-  total: number;
-};
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -27,30 +18,39 @@ export async function GET(request: Request) {
       return Response.json({ error: "Use dates in YYYY-MM-DD format." }, { status: 400 });
     }
 
-    const result = await getD1()
-      .prepare(
-        `SELECT id, created_at, order_type, status, payment_method, subtotal, delivery_fee, total
-        FROM orders
-        WHERE payment_status IN ('paid', 'demo_paid')
-          AND (? = '' OR created_at >= ?)
-          AND (? = '' OR created_at < date(?, '+1 day'))
-        ORDER BY id DESC
-        LIMIT 5000`,
+    const rows = await getDb()
+      .select({
+        id: orders.id,
+        createdAt: orders.createdAt,
+        orderType: orders.orderType,
+        status: orders.status,
+        paymentMethod: orders.paymentMethod,
+        subtotal: orders.subtotal,
+        deliveryFee: orders.deliveryFee,
+        total: orders.total,
+      })
+      .from(orders)
+      .where(
+        and(
+          inArray(orders.paymentStatus, ["paid", "demo_paid"]),
+          from ? gte(orders.createdAt, from) : undefined,
+          to ? lt(orders.createdAt, sql`date(${to}, '+1 day')`) : undefined,
+        ),
       )
-      .bind(from, from, to, to)
-      .all<ExportRow>();
+      .orderBy(desc(orders.id))
+      .limit(5000);
 
     const lines = [
       "order,created_at_utc,type,status,payment_method,subtotal_ghs,delivery_fee_ghs,total_ghs",
-      ...(result.results ?? []).map((row) =>
+      ...rows.map((row) =>
         [
           row.id,
-          row.created_at,
-          row.order_type,
+          row.createdAt,
+          row.orderType,
           row.status,
-          row.payment_method,
+          row.paymentMethod,
           row.subtotal,
-          row.delivery_fee,
+          row.deliveryFee,
           row.total,
         ].join(","),
       ),

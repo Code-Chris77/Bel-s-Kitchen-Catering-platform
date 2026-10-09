@@ -20,6 +20,8 @@ export const orders = sqliteTable("orders", {
   chefSmsStatus: text("chef_sms_status").notNull().default("demo"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  /** Who last changed the order ("customer" when created); copied into order_events by a trigger. */
+  updatedBy: text("updated_by").notNull().default("customer"),
 }, (table) => [
   index("orders_created_at_idx").on(table.createdAt),
   index("orders_status_created_at_idx").on(table.status, table.createdAt),
@@ -61,3 +63,42 @@ export const orderEvents = sqliteTable("order_events", {
   actor: text("actor").notNull().default("kitchen"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("order_events_order_id_idx").on(table.orderId)]);
+
+/** Meals shown on the menu. Admins can rename, describe, hide and reorder them. */
+export const menuItems = sqliteTable("menu_items", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  note: text("note").notNull().default(""),
+  accent: text("accent").notNull().default(""),
+  image: text("image").notNull(),
+  alt: text("alt").notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+});
+
+/** Plate prices (whole GH₵) offered for every meal. */
+export const priceTiers = sqliteTable("price_tiers", {
+  amount: integer("amount").primaryKey(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+});
+
+export const deliveryZones = sqliteTable("delivery_zones", {
+  id: text("id").primaryKey(),
+  label: text("label").notNull(),
+  fee: integer("fee").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+});
+
+/** Individual kitchen accounts (so status changes are attributable and revocable). */
+export const staff = sqliteTable("staff", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  salt: text("salt").notNull(),
+  iterations: integer("iterations").notNull(),
+  /** Changes whenever the password is reset or the account is disabled, ending open sessions. */
+  sessionVersion: text("session_version").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

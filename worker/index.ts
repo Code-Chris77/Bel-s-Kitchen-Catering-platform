@@ -45,6 +45,10 @@ function withSecurityHeaders(request: Request, url: URL, response: Response) {
   if (url.pathname.startsWith("/api/")) {
     headers.set("Cache-Control", "no-store");
   }
+  // Build output is content-hashed, so it can be cached forever.
+  if (url.pathname.startsWith("/assets/") && response.ok && !headers.has("Cache-Control")) {
+    headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  }
   if (isPrivatePage(url.pathname)) {
     headers.set("X-Robots-Tag", "noindex, nofollow");
     headers.set("Cache-Control", "no-store");

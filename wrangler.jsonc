@@ -7,6 +7,9 @@
   "assets": {
     "binding": "ASSETS"
   },
+  "observability": {
+    "enabled": true
+  },
   "triggers": {
     "crons": ["17 3 * * *"]
   },

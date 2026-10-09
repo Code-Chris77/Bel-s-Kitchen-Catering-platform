@@ -1,24 +1,7 @@
 /**
- * Single source of truth for menu, pricing, delivery, payment and order-status
- * rules. Imported by both the API routes and the pages.
+ * Payment-method and order-status rules shared by the API routes and the pages.
+ * The menu, price tiers and delivery zones live in the database (see lib/menu.ts).
  */
-
-export const MENU = {
-  fried: "Fried Rice",
-  jollof: "Jollof Rice",
-  mixed: "The Mix",
-} as const;
-export type MealId = keyof typeof MENU;
-
-/** Plate prices in GH₵ that the menu offers for every meal. */
-export const PRICES = [35, 40, 50] as const;
-
-export const DELIVERY_ZONES = {
-  accra: { label: "Accra", fee: 30 },
-  tema: { label: "Tema", fee: 50 },
-  outside: { label: "Outside Accra", fee: 80 },
-} as const;
-export type DeliveryZone = keyof typeof DELIVERY_ZONES;
 
 export const PAYMENT_METHODS = ["mtn", "telecel", "at", "card"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -56,18 +39,6 @@ export function canCancel(status: string) {
   return status === "received" || status === "preparing" || status === "ready";
 }
 
-export function isMealId(value: string): value is MealId {
-  return Object.hasOwn(MENU, value);
-}
-
-export function isDeliveryZone(value: string): value is DeliveryZone {
-  return Object.hasOwn(DELIVERY_ZONES, value);
-}
-
 export function isPaymentMethod(value: string): value is PaymentMethod {
   return (PAYMENT_METHODS as readonly string[]).includes(value);
-}
-
-export function isValidPrice(value: number) {
-  return (PRICES as readonly number[]).includes(value);
 }

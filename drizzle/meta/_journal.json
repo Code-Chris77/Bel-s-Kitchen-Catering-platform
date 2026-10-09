@@ -36,6 +36,27 @@
       "when": 1791502818780,
       "tag": "0004_order_events",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791503725963,
+      "tag": "0005_menu_zones_staff",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791503726925,
+      "tag": "0006_constraint_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1791504608762,
+      "tag": "0007_order_event_triggers",
+      "breakpoints": true
     }
   ]
 }
