@@ -5,6 +5,8 @@ import { ArrowLeft } from "lucide-react";
 import { SiteBrand } from "@/components/site-brand";
 import { PERSONAL_DATA_RETENTION_DAYS } from "@/lib/retention";
 
+import "../tracking.css";
+
 export const metadata: Metadata = {
   title: "Privacy",
   description: "How Bel's Kitchen Catering Service uses and protects your order details.",

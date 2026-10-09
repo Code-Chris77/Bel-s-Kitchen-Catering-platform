@@ -30,8 +30,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MenuEditor } from "@/components/admin/menu-editor";
+import { StaffManager } from "@/components/admin/staff-manager";
 import { SiteBrand } from "@/components/site-brand";
 import { formatCedis } from "@/lib/format";
+
+import "../admin.css";
 
 type Summary = {
   todayRevenue: number;
@@ -167,6 +171,17 @@ export default function AdminPage() {
     if (!dashboard.summary.todayOrders) return 0;
     return dashboard.summary.todayRevenue / dashboard.summary.todayOrders;
   }, [dashboard.summary]);
+
+  const signOutEverywhere = async () => {
+    if (!window.confirm("Sign out every admin session, including this one?")) return;
+    const response = await fetch("/api/admin-settings/sign-out-everywhere", { method: "POST" });
+    if (!response.ok) {
+      toast.error("Sessions could not be ended. Please try again.");
+      return;
+    }
+    setDashboard(emptyDashboard);
+    setAccess("locked");
+  };
 
   const submitLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -438,7 +453,17 @@ export default function AdminPage() {
             </Button>
           </form>
           <div className="admin-security-note"><ShieldCheck /><span>The password is securely stored and is never shown in the financial records.</span></div>
+          <h3 className="admin-subheading">Sign out everywhere</h3>
+          <p>Ends every open admin session on every device, including this one.</p>
+          <Button variant="outline" type="button" onClick={() => void signOutEverywhere()}>
+            Sign out all admin devices
+          </Button>
         </aside>
+      </section>
+
+      <section className="admin-extra">
+        <StaffManager />
+        <MenuEditor />
       </section>
     </main>
   );

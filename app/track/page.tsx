@@ -24,6 +24,8 @@ import { SiteBrand } from "@/components/site-brand";
 import { usePolling } from "@/hooks/use-polling";
 import type { OrderStatus, OrderType } from "@/lib/domain";
 
+import "../tracking.css";
+
 type TrackedOrder = {
   orderNumber: number;
   orderType: OrderType;

@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 
+import "./tracking.css";
+
 export default function NotFound() {
   return (
     <main className="tracking-page">
